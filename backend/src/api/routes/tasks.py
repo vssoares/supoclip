@@ -40,6 +40,7 @@ from ...clip_cleanup import (
     updated_cleanup_settings,
 )
 from ...outro import find_user_outro_path
+from ...watermark import find_user_watermark_path, normalize_watermark_request
 from ...video_utils import VALID_OUTPUT_FORMATS
 from ...admin_auth import require_admin_user, user_is_admin
 import redis.asyncio as redis
@@ -199,8 +200,12 @@ def _merge_task_source_metadata(
     add_subtitles: Any = None,
     cleanup_settings: Dict[str, Any] | None = None,
     outro: Any = None,
+    watermark: Any = None,
 ) -> Dict[str, Any]:
     merged = dict(existing or {})
+
+    if isinstance(watermark, dict) and watermark:
+        merged["watermark"] = watermark
 
     if isinstance(outro, str) and outro:
         merged["outro"] = outro
@@ -364,6 +369,11 @@ async def create_task(request: Request, db: AsyncSession = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Selected outro is not available")
     else:
         outro = None
+    watermark = normalize_watermark_request(data.get("watermark"))
+    if data.get("watermark") and watermark is None:
+        raise HTTPException(status_code=400, detail="Selected watermark is not available")
+    if watermark is not None and find_user_watermark_path(watermark["filename"], user_id) is None:
+        raise HTTPException(status_code=400, detail="Selected watermark is not available")
     if not raw_source or not raw_source.get("url"):
         raise HTTPException(status_code=400, detail="Source URL is required")
 
@@ -411,6 +421,7 @@ async def create_task(request: Request, db: AsyncSession = Depends(get_db)):
                         add_subtitles=add_subtitles,
                         cleanup_settings=cleanup_settings,
                         outro=outro,
+                        watermark=watermark,
                     ),
                     db=db,
                 )
@@ -433,6 +444,7 @@ async def create_task(request: Request, db: AsyncSession = Depends(get_db)):
                     add_subtitles,
                     cleanup_settings,
                     outro=outro,
+                    watermark=watermark,
                     _job_id=processing_job_id,
                 )
 
@@ -1256,6 +1268,7 @@ async def resume_task(
                         add_subtitles,
                         cleanup_settings,
                         outro=metadata.get("outro"),
+                        watermark=normalize_watermark_request(metadata.get("watermark")),
                         _job_id=processing_job_id,
                     )
                 except Exception:
