@@ -32,8 +32,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 
 logger = logging.getLogger(__name__)
+from ...media.ffmpeg import ffprobe_duration, ffprobe_video_size
+from ...outro import (
+    MAX_OUTRO_SECONDS,
+    SUPPORTED_OUTRO_EXTENSIONS,
+    find_user_outro_path,
+    get_user_outros_dir,
+    list_user_outros,
+    sanitize_outro_stem,
+)
+
+from ...watermark import (
+    SUPPORTED_WATERMARK_EXTENSIONS,
+    find_user_watermark_path,
+    get_user_watermarks_dir,
+    list_user_watermarks,
+    sanitize_watermark_stem,
+)
+
 router = APIRouter(tags=["media"])
 MAX_FONT_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_OUTRO_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_OUTROS_PER_USER = 5
+MAX_WATERMARK_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_WATERMARKS_PER_USER = 5
 
 
 async def _get_authenticated_user_id(request: Request, db: AsyncSession) -> str:
@@ -245,6 +267,176 @@ async def get_available_transitions():
         raise HTTPException(
             status_code=500, detail=f"Error retrieving transitions: {str(e)}"
         )
+
+
+def _outro_info(path: Path) -> dict:
+    return {
+        "filename": path.name,
+        "display_name": path.stem.replace("-", " ").replace("_", " ").strip().title(),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+@router.get("/outros")
+async def get_outros(request: Request, db: AsyncSession = Depends(get_db)):
+    """List the authenticated user's outro videos."""
+    user_id = await _get_authenticated_user_id(request, db)
+    return {"outros": [_outro_info(path) for path in list_user_outros(user_id)]}
+
+
+@router.post("/outros/upload")
+async def upload_outro(
+    request: Request,
+    uploaded_file: UploadFile = File(..., alias="file"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a video to append at the end of generated clips."""
+    try:
+        user_id = await _get_authenticated_user_id(request, db)
+        uploaded_filename = uploaded_file.filename or ""
+        extension = Path(uploaded_filename).suffix.lower()
+        if extension not in SUPPORTED_OUTRO_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail="Outros must be .mp4, .mov, .webm or .m4v videos",
+            )
+        if len(list_user_outros(user_id)) >= MAX_OUTROS_PER_USER:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You can keep up to {MAX_OUTROS_PER_USER} outros. Delete one first.",
+            )
+
+        outros_dir = get_user_outros_dir(user_id)
+        outros_dir.mkdir(parents=True, exist_ok=True)
+        stem = sanitize_outro_stem(uploaded_filename)
+        target_path = outros_dir / f"{stem}{extension}"
+        suffix = 2
+        while target_path.exists():
+            target_path = outros_dir / f"{stem}-{suffix}{extension}"
+            suffix += 1
+
+        await _write_upload_to_disk(uploaded_file, target_path, MAX_OUTRO_UPLOAD_BYTES)
+
+        duration = await run_in_thread(ffprobe_duration, target_path)
+        if duration <= 0:
+            target_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="Could not read this video")
+        if duration > MAX_OUTRO_SECONDS:
+            target_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Outros can be at most {int(MAX_OUTRO_SECONDS)} seconds long",
+            )
+
+        return {"outro": _outro_info(target_path), "message": "Outro uploaded"}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error uploading outro: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading outro: {str(e)}")
+
+
+@router.delete("/outros/{filename}")
+async def delete_outro(
+    filename: str, request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Delete one of the authenticated user's outros."""
+    user_id = await _get_authenticated_user_id(request, db)
+    path = find_user_outro_path(filename, user_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Outro not found")
+    path.unlink(missing_ok=True)
+    return {"filename": filename, "message": "Outro deleted"}
+
+
+def _watermark_info(path: Path) -> dict:
+    return {
+        "filename": path.name,
+        "display_name": path.stem.replace("-", " ").replace("_", " ").strip().title(),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+@router.get("/watermarks")
+async def get_watermarks(request: Request, db: AsyncSession = Depends(get_db)):
+    """List the authenticated user's watermark images."""
+    user_id = await _get_authenticated_user_id(request, db)
+    return {"watermarks": [_watermark_info(path) for path in list_user_watermarks(user_id)]}
+
+
+@router.get("/watermarks/{filename}/file")
+async def get_watermark_file(
+    filename: str, request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Serve one of the authenticated user's watermark images (for previews)."""
+    user_id = await _get_authenticated_user_id(request, db)
+    path = find_user_watermark_path(filename, user_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Watermark not found")
+    return FileResponse(path)
+
+
+@router.post("/watermarks/upload")
+async def upload_watermark(
+    request: Request,
+    uploaded_file: UploadFile = File(..., alias="file"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload an image to overlay on a corner of generated clips."""
+    try:
+        user_id = await _get_authenticated_user_id(request, db)
+        uploaded_filename = uploaded_file.filename or ""
+        extension = Path(uploaded_filename).suffix.lower()
+        if extension not in SUPPORTED_WATERMARK_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail="Watermarks must be .png, .jpg, .jpeg or .webp images",
+            )
+        if len(list_user_watermarks(user_id)) >= MAX_WATERMARKS_PER_USER:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You can keep up to {MAX_WATERMARKS_PER_USER} watermarks. Delete one first.",
+            )
+
+        directory = get_user_watermarks_dir(user_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        stem = sanitize_watermark_stem(uploaded_filename)
+        target_path = directory / f"{stem}{extension}"
+        suffix = 2
+        while target_path.exists():
+            target_path = directory / f"{stem}-{suffix}{extension}"
+            suffix += 1
+
+        await _write_upload_to_disk(uploaded_file, target_path, MAX_WATERMARK_UPLOAD_BYTES)
+
+        width, height = await run_in_thread(ffprobe_video_size, target_path)
+        if width <= 0 or height <= 0:
+            target_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="Could not read this image")
+
+        return {"watermark": _watermark_info(target_path), "message": "Watermark uploaded"}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error uploading watermark: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading watermark: {str(e)}")
+
+
+@router.delete("/watermarks/{filename}")
+async def delete_watermark(
+    filename: str, request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Delete one of the authenticated user's watermarks."""
+    user_id = await _get_authenticated_user_id(request, db)
+    path = find_user_watermark_path(filename, user_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Watermark not found")
+    path.unlink(missing_ok=True)
+    return {"filename": filename, "message": "Watermark deleted"}
 
 
 @router.get("/caption-templates")

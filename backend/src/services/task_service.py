@@ -30,6 +30,8 @@ from .task_completion_email_service import (
 from ..config import Config, get_config
 from ..youtube_utils import cleanup_downloaded_files, extract_video_id
 from ..clip_cleanup import normalize_clip_cleanup_settings
+from ..outro import find_user_outro_path
+from ..watermark import find_user_watermark_path, normalize_watermark_request
 from ..ai import TRANSCRIPT_ANALYSIS_CACHE_VERSION
 from ..clip_source_map import load_clip_caption_settings
 from ..media_storage import MediaStorage, media_work
@@ -260,6 +262,8 @@ class TaskService(ClipEditingMixin):
         should_cancel: Optional[Callable] = None,
         clip_ready_callback: Optional[Callable] = None,
         cleanup_settings: Optional[Dict[str, Any]] = None,
+        outro: Optional[str] = None,
+        watermark: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Process a task: download video, analyze, create clips.
@@ -365,6 +369,27 @@ class TaskService(ClipEditingMixin):
             normalized_cleanup_settings = normalize_clip_cleanup_settings(
                 **(cleanup_settings or {})
             )
+            outro_path = find_user_outro_path(outro, user_id) if user_id else None
+            if outro and outro_path is None:
+                logger.warning(
+                    "Outro %s is no longer available; rendering task %s without it",
+                    outro,
+                    task_id,
+                )
+
+            watermark_request = normalize_watermark_request(watermark)
+            watermark_path = (
+                find_user_watermark_path(watermark_request["filename"], user_id)
+                if watermark_request and user_id
+                else None
+            )
+            if watermark_request and watermark_path is None:
+                logger.warning(
+                    "Watermark %s is no longer available; rendering task %s without it",
+                    watermark_request["filename"],
+                    task_id,
+                )
+            watermark_position = watermark_request["position"] if watermark_request else None
 
             # Render clips incrementally: render, save, notify one at a time
             segments_to_render = result.get("segments_to_render", [])
@@ -433,6 +458,9 @@ class TaskService(ClipEditingMixin):
                     output_format,
                     add_subtitles,
                     normalized_cleanup_settings,
+                    outro_path,
+                    watermark_path,
+                    watermark_position,
                 )
                 pending_clip_path = Path(clip_info["path"]) if clip_info else None
                 await check_cancelled()

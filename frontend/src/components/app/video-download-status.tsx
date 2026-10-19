@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, Wrench } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 type ServiceStatus = {
   status: "operational" | "degraded" | "outage" | "maintenance";
@@ -12,19 +13,19 @@ type ServiceStatus = {
 
 const presentation = {
   degraded: {
-    label: "Degraded",
+    label: "dl.degraded",
     icon: AlertCircle,
     card: "border-amber-200 bg-amber-50/80 text-amber-950",
     iconColor: "text-amber-700",
   },
   outage: {
-    label: "Outage",
+    label: "dl.outage",
     icon: AlertCircle,
     card: "border-red-200 bg-red-50/80 text-red-950",
     iconColor: "text-red-700",
   },
   maintenance: {
-    label: "Maintenance",
+    label: "dl.maintenance",
     icon: Wrench,
     card: "border-blue-200 bg-blue-50/80 text-blue-950",
     iconColor: "text-blue-700",
@@ -39,6 +40,7 @@ function isServiceStatus(value: unknown): value is ServiceStatus {
 }
 
 export function VideoDownloadStatus() {
+  const t = useT();
   const [component, setComponent] = useState<ServiceStatus | null>(null);
 
   useEffect(() => {
@@ -86,13 +88,13 @@ export function VideoDownloadStatus() {
   const style = presentation[component.status];
   const Icon = style.icon;
   return (
-    <section role="status" aria-label="YouTube import status" className={`mt-6 rounded-xl border px-4 py-3.5 sm:px-5 ${style.card}`}>
+    <section role="status" aria-label={t("dl.aria")} className={`mt-6 rounded-xl border px-4 py-3.5 sm:px-5 ${style.card}`}>
       <div className="flex items-start gap-3">
         <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${style.iconColor}`} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <p className="text-sm font-semibold">YouTube imports · {style.label}</p>
-            <Link href="/status" className="text-xs font-semibold underline underline-offset-2 hover:opacity-70">View status page</Link>
+            <p className="text-sm font-semibold">{t("dl.title", { label: t(style.label) })}</p>
+            <Link href="/status" className="text-xs font-semibold underline underline-offset-2 hover:opacity-70">{t("dl.viewStatus")}</Link>
           </div>
           <p className="mt-2 text-sm font-semibold">{component.headline}</p>
           <p className="mt-1 text-sm leading-6 opacity-85">{component.description}</p>

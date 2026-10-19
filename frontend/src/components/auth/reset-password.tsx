@@ -6,8 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { resetPassword } from "../../lib/auth-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { useT } from "@/lib/i18n";
 
 export function ResetPassword() {
+  const t = useT();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const linkError = searchParams.get("error");
@@ -22,7 +24,7 @@ export function ResetPassword() {
     e.preventDefault();
     if (!token) return;
     if (password !== confirmPassword) {
-      setMessage("Passwords do not match");
+      setMessage(t("reset.mismatch"));
       return;
     }
 
@@ -33,7 +35,7 @@ export function ResetPassword() {
 
     setLoading(false);
     if (response.error) {
-      setMessage(response.error.message || "Failed to reset password");
+      setMessage(response.error.message || t("reset.failed"));
       return;
     }
 
@@ -44,12 +46,12 @@ export function ResetPassword() {
   if (!token || linkError) {
     return (
       <div className="w-full">
-        <h1 className="font-display text-3xl font-bold tracking-tight">Link expired</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("reset.expired")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This password reset link is invalid or has expired.
+          {t("reset.expiredBody")}
         </p>
         <Link href="/forgot-password" className="mt-8 inline-block text-sm font-medium underline-offset-4 hover:underline">
-          Request a new link
+          {t("reset.request")}
         </Link>
       </div>
     );
@@ -57,17 +59,17 @@ export function ResetPassword() {
 
   return (
     <div className="w-full">
-      <h1 className="font-display text-3xl font-bold tracking-tight">Choose a new password</h1>
-      <p className="mt-2 text-sm text-muted-foreground">You&apos;ll be signed out on other devices.</p>
+      <h1 className="font-display text-3xl font-bold tracking-tight">{t("reset.title")}</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{t("reset.subtitle")}</p>
       <div className="mt-8">
         {done ? (
-          <p className="text-sm text-green-600">Password updated. Redirecting to sign in...</p>
+          <p className="text-sm text-green-600">{t("reset.done")}</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               className="h-11"
               type="password"
-              placeholder="New password"
+              placeholder={t("reset.newPassword")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -77,7 +79,7 @@ export function ResetPassword() {
             <Input
               className="h-11"
               type="password"
-              placeholder="Confirm new password"
+              placeholder={t("reset.confirm")}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
@@ -85,7 +87,7 @@ export function ResetPassword() {
               disabled={loading}
             />
             <Button type="submit" className="h-11 w-full" disabled={loading}>
-              {loading ? "Saving..." : "Reset password"}
+              {loading ? t("reset.saving") : t("reset.submit")}
             </Button>
           </form>
         )}

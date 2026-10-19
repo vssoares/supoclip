@@ -14,19 +14,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialProviderIcon } from "@/components/social-provider-icon";
-import { timeAgo } from "@/lib/generations";
+import { useLocale, useT, useTimeAgo } from "@/lib/i18n";
+import type { Translate } from "@/lib/i18n";
 import { PROVIDER_LABELS, type SocialPost } from "@/lib/social";
 
-const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" });
-const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-
-function dayLabel(date: Date): string {
+function dayLabel(date: Date, t: Translate, locale: string): string {
   const today = new Date();
   const startOf = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
   const days = Math.round((startOf(date) - startOf(today)) / 86_400_000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return dayFormat.format(date);
+  if (days === 0) return t("sch.today");
+  if (days === 1) return t("sch.tomorrow");
+  return new Intl.DateTimeFormat(locale, { weekday: "long", month: "short", day: "numeric" }).format(date);
 }
 
 function accountName(post: SocialPost): string {
@@ -39,6 +37,10 @@ function accountName(post: SocialPost): string {
 
 /** Every upcoming scheduled post across the user's tasks, soonest first. */
 export function ScheduledPosts({ sectionHeadingClassName }: { sectionHeadingClassName: string }) {
+  const t = useT();
+  const locale = useLocale();
+  const timeAgo = useTimeAgo();
+  const timeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }), [locale]);
   const [posts, setPosts] = useState<SocialPost[] | null>(null);
   const [busyPostId, setBusyPostId] = useState<string | null>(null);
 
@@ -66,21 +68,21 @@ export function ScheduledPosts({ sectionHeadingClassName }: { sectionHeadingClas
       .sort((a, b) => new Date(a.scheduled_for!).getTime() - new Date(b.scheduled_for!).getTime());
     const byDay = new Map<string, SocialPost[]>();
     for (const post of sorted) {
-      const label = dayLabel(new Date(post.scheduled_for!));
+      const label = dayLabel(new Date(post.scheduled_for!), t, locale);
       byDay.set(label, [...(byDay.get(label) ?? []), post]);
     }
     return [...byDay.entries()];
-  }, [posts]);
+  }, [posts, t, locale]);
 
   const cancel = async (post: SocialPost) => {
     setBusyPostId(post.id);
     try {
       const response = await fetch(`/api/social/posts/${post.id}/cancel`, { method: "POST" });
       if (response.ok) {
-        toast.success("Scheduled post cancelled");
+        toast.success(t("sch.cancelled"));
       } else {
         const data = await response.json().catch(() => ({}));
-        toast.error(typeof data?.detail === "string" ? data.detail : "Could not cancel the post");
+        toast.error(typeof data?.detail === "string" ? data.detail : t("sch.cancelFailed"));
       }
       await load();
     } finally {
@@ -90,12 +92,12 @@ export function ScheduledPosts({ sectionHeadingClassName }: { sectionHeadingClas
 
   return (
     <section className="mb-10">
-      <h2 className={sectionHeadingClassName}>Scheduled</h2>
+      <h2 className={sectionHeadingClassName}>{t("sch.title")}</h2>
       {posts === null ? (
         <Skeleton className="h-16 w-full" />
       ) : groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nothing scheduled. Open a clip, choose Publish and turn on Schedule for later.
+          {t("sch.empty")}
         </p>
       ) : (
         <div className="space-y-5">
@@ -105,7 +107,7 @@ export function ScheduledPosts({ sectionHeadingClassName }: { sectionHeadingClas
               <div className="divide-y rounded-xl border bg-background">
                 {dayPosts.map((post) => {
                   const when = new Date(post.scheduled_for!);
-                  const title = post.hook_title || post.title || "Untitled clip";
+                  const title = post.hook_title || post.title || t("soc.untitled");
                   return (
                     <div key={post.id} className="flex items-center gap-3 px-4 py-3 text-sm">
                       <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{timeFormat.format(when)}</span>
@@ -129,7 +131,7 @@ export function ScheduledPosts({ sectionHeadingClassName }: { sectionHeadingClas
                             variant="ghost"
                             className="size-8 text-muted-foreground"
                             disabled={busyPostId === post.id}
-                            aria-label="Scheduled post actions"
+                            aria-label={t("sch.actions")}
                           >
                             {busyPostId === post.id ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
                           </Button>
@@ -138,12 +140,12 @@ export function ScheduledPosts({ sectionHeadingClassName }: { sectionHeadingClas
                           {post.task_id && (
                             <DropdownMenuItem asChild>
                               <Link href={`/tasks/${post.task_id}`}>
-                                <ExternalLink /> Open clip
+                                <ExternalLink /> {t("sch.openClip")}
                               </Link>
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem variant="destructive" onSelect={() => cancel(post)}>
-                            <XCircle /> Cancel post
+                            <XCircle /> {t("pub.cancelPost")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

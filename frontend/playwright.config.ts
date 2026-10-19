@@ -57,6 +57,7 @@ export default defineConfig({
         BACKEND_INTERNAL_URL: backendBaseUrl,
         BACKEND_AUTH_SECRET: backendAuthSecret,
         NEXT_PUBLIC_SELF_HOST: "true",
+        NEXT_PUBLIC_DEFAULT_LOCALE: "en",
         BETTER_AUTH_SECRET:
           process.env.BETTER_AUTH_SECRET ?? "supoclip_better_auth_test_secret",
       },

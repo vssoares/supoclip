@@ -14,7 +14,8 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       NEXT_BUILD_DIR: ".next-polish",
-      NEXT_PUBLIC_SELF_HOST: "true", NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3118",
+      NEXT_PUBLIC_SELF_HOST: "true",
+      NEXT_PUBLIC_DEFAULT_LOCALE: "en", NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3118",
       BETTER_AUTH_URL: "http://127.0.0.1:3118",
       BETTER_AUTH_SECRET: "supoclip-isolated-browser-test-secret",
       DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",

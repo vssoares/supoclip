@@ -40,14 +40,15 @@ import {
   type EditorState,
 } from "@/lib/editor/document";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { Field, Panel, Range, Section } from "./studio-ui";
 export type InspectorTab = "captions" | "framing" | "audio" | "effects";
 
 const TABS = [
-  ["captions", "Captions", Captions],
-  ["framing", "Framing", Crop],
-  ["audio", "Audio", Volume2],
-  ["effects", "Effects", Palette],
+  ["captions", "ed.tab.captions", Captions],
+  ["framing", "ed.tab.framing", Crop],
+  ["audio", "ed.tab.audio", Volume2],
+  ["effects", "ed.tab.effects", Palette],
 ] as const;
 
 function ColorField({
@@ -120,6 +121,7 @@ export function Inspector({
   update,
   applyAll,
 }: Props) {
+  const t = useT();
   const scriptWords = useRef(doc.words);
   const [script, setScript] = useState<string | null>(null),
     [applying, setApplying] = useState(false);
@@ -127,7 +129,7 @@ export function Inspector({
     update((d) => ({ ...d, captions: { ...d.captions, ...change } }), group);
   return (
     <Panel
-      aria-label="Editor tools"
+      aria-label={t("ed.tools")}
       className="md:sticky md:top-4 xl:col-start-3"
     >
       <Tabs
@@ -144,7 +146,7 @@ export function Inspector({
                 className="h-auto flex-col gap-1 py-2 text-xs"
               >
                 <Icon />
-                {label}
+                {t(label)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -152,11 +154,11 @@ export function Inspector({
         <div className="md:max-h-[calc(100dvh-250px)] md:overflow-y-auto">
           <TabsContent value="captions" className="space-y-6 p-4">
             <Section
-              title="Caption style"
-              description="Pick a look, then fine-tune it below."
+              title={t("ed.captionStyle")}
+              description={t("ed.captionStyleDesc")}
               action={
                 <Switch
-                  aria-label="Show captions"
+                  aria-label={t("ed.showCaptions")}
                   checked={doc.captions.enabled}
                   onCheckedChange={(enabled) => caption({ enabled })}
                 />
@@ -165,9 +167,9 @@ export function Inspector({
               <div className="grid grid-cols-3 gap-2">
                 {(
                   [
-                    ["Clean", false, "#FFFFFF"],
-                    ["Highlight", true, "#FACC15"],
-                    ["Pop", true, "#A3E635"],
+                    ["ed.preset.clean", false, "#FFFFFF"],
+                    ["ed.preset.highlight", true, "#FACC15"],
+                    ["ed.preset.pop", true, "#A3E635"],
                   ] as const
                 ).map(([name, background, accent]) => {
                   const active =
@@ -190,24 +192,24 @@ export function Inspector({
                             background && "rounded-sm bg-black/60",
                           )}
                         >
-                          Your <span style={{ color: accent }}>story</span>
+                          {t("ed.yourStory")} <span style={{ color: accent }}>{t("ed.story")}</span>
                         </span>
                       </span>
                       <span className="block px-0.5 pt-1.5 text-xs font-medium">
-                        {name}
+                        {t(name)}
                       </span>
                     </button>
                   );
                 })}
               </div>
-              <Field label="Font">
+              <Field label={t("ed.font")}>
                 <Select
                   value={doc.captions.font}
                   onValueChange={(font) =>
                     caption({ font: font as CaptionStyle["font"] })
                   }
                 >
-                  <SelectTrigger aria-label="Caption font" className="w-full">
+                  <SelectTrigger aria-label={t("ed.captionFont")} className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -221,14 +223,14 @@ export function Inspector({
                 </Select>
               </Field>
               <Range
-                label="Subtitle size"
+                label={t("ed.subtitleSize")}
                 value={doc.captions.size}
                 min={20}
                 max={132}
                 onChange={(size) => caption({ size })}
               />
               <Range
-                label="Subtitle vertical position"
+                label={t("ed.subtitleY")}
                 value={doc.captions.y * 100}
                 min={10}
                 max={90}
@@ -237,45 +239,45 @@ export function Inspector({
               />
               <div className="grid grid-cols-2 gap-3">
                 <ColorField
-                  label="Text"
-                  inputLabel="Caption text color"
+                  label={t("ed.text")}
+                  inputLabel={t("ed.captionTextColor")}
                   value={doc.captions.color}
                   onChange={(color) => caption({ color })}
                 />
                 <ColorField
-                  label="Highlight"
-                  inputLabel="Highlight color"
+                  label={t("ed.highlight")}
+                  inputLabel={t("ed.highlightColor")}
                   value={doc.captions.accent}
                   onChange={(accent) => caption({ accent })}
                 />
               </div>
               <SwitchRow
                 id="caption-background"
-                label="Text background"
+                label={t("ed.textBackground")}
                 checked={doc.captions.background}
                 onChange={(background) => caption({ background })}
               />
               <SwitchRow
                 id="caption-karaoke"
-                label="Highlight spoken word"
+                label={t("ed.highlightSpoken")}
                 checked={!!doc.captions.karaoke}
                 onChange={(karaoke) => caption({ karaoke })}
               />
               <SwitchRow
                 id="caption-uppercase"
-                label="Uppercase"
+                label={t("ed.uppercase")}
                 checked={!!doc.captions.uppercase}
                 onChange={(uppercase) => caption({ uppercase })}
               />
               <div className="flex items-center justify-between gap-3">
-                <Label className="text-sm font-normal">Words per caption</Label>
+                <Label className="text-sm font-normal">{t("ed.wordsPerCaption")}</Label>
                 <Select
                   value={String(doc.captions.wordsPerLine)}
                   onValueChange={(n) => caption({ wordsPerLine: Number(n) })}
                 >
                   <SelectTrigger
                     size="sm"
-                    aria-label="Words per caption"
+                    aria-label={t("ed.wordsPerCaption")}
                     className="w-16 tabular-nums"
                   >
                     <SelectValue />
@@ -299,14 +301,14 @@ export function Inspector({
                         "supoclip-caption-style",
                         JSON.stringify(doc.captions),
                       );
-                      toast.success("Caption style saved");
+                      toast.success(t("ed.styleSaved"));
                     } catch {
-                      toast.error("Could not save style on this device");
+                      toast.error(t("ed.styleSaveFailed"));
                     }
                   }}
                 >
                   <Bookmark />
-                  Save style
+                  {t("ed.saveStyle")}
                 </Button>
                 <Button
                   size="sm"
@@ -318,13 +320,13 @@ export function Inspector({
                           "null",
                       );
                       if (style?.font && style?.size) caption(style);
-                      else toast.info("Save a style first");
+                      else toast.info(t("ed.saveFirst"));
                     } catch {
-                      toast.error("Could not load saved style");
+                      toast.error(t("ed.styleLoadFailed"));
                     }
                   }}
                 >
-                  Load style
+                  {t("ed.loadStyle")}
                 </Button>
                 <Button
                   size="sm"
@@ -340,7 +342,7 @@ export function Inspector({
                     }
                   }}
                 >
-                  {applying ? "Applying…" : "Apply to all clips"}
+                  {applying ? t("ed.applying") : t("ed.applyAll")}
                 </Button>
               </div>
             </Section>
@@ -348,13 +350,13 @@ export function Inspector({
             <Section
               title={
                 <>
-                  Transcript{" "}
+                  {t("ed.transcript")}{" "}
                   <span className="font-normal text-muted-foreground">
-                    · {doc.words.length} words
+                    {t("ed.wordsCount", { count: doc.words.length })}
                   </span>
                 </>
               }
-              description="Correct a word without moving its timing. Click play to hear it in context."
+              description={t("ed.transcriptDesc")}
               action={
                 <Button
                   size="sm"
@@ -369,7 +371,7 @@ export function Inspector({
                     );
                   }}
                 >
-                  {script === null ? "Edit script" : "Close script"}
+                  {script === null ? t("ed.editScript") : t("ed.closeScript")}
                 </Button>
               }
             >
@@ -377,7 +379,7 @@ export function Inspector({
                 <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
                   <Textarea
                     className="min-h-24 bg-background text-sm"
-                    aria-label="Subtitle text"
+                    aria-label={t("ed.subtitleText")}
                     value={script}
                     onChange={(e) => {
                       const text = e.target.value;
@@ -401,8 +403,7 @@ export function Inspector({
                   />
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs text-muted-foreground">
-                      Existing words keep their timing. Review the timing of
-                      inserted words.
+                      {t("ed.scriptHint")}
                     </p>
                     <Button
                       size="sm"
@@ -422,7 +423,7 @@ export function Inspector({
                         }
                       }}
                     >
-                      Apply script
+                      {t("ed.applyScript")}
                     </Button>
                   </div>
                 </div>
@@ -441,8 +442,8 @@ export function Inspector({
                       <Button
                         size="icon-sm"
                         variant="ghost"
-                        aria-label={`Seek to word ${i + 1}`}
-                        title="Seek to word"
+                        aria-label={t("ed.seekWordN", { n: i + 1 })}
+                        title={t("ed.seekWord")}
                         onClick={() => seek(word.start)}
                         className="size-7 text-muted-foreground"
                       >
@@ -450,7 +451,7 @@ export function Inspector({
                       </Button>
                       <input
                         className="h-7 min-w-0 rounded-sm bg-transparent px-1.5 text-sm outline-none focus:bg-background focus:ring-2 focus:ring-ring/50"
-                        aria-label={`Word ${i + 1}`}
+                        aria-label={t("ed.wordN", { n: i + 1 })}
                         maxLength={120}
                         value={word.text}
                         onChange={(e) =>
@@ -471,7 +472,7 @@ export function Inspector({
                         <Button
                           size="icon-sm"
                           variant="ghost"
-                          aria-label={`Highlight word ${i + 1}`}
+                          aria-label={t("ed.highlightWordN", { n: i + 1 })}
                           aria-pressed={word.highlight}
                           className={cn(
                             "size-7",
@@ -495,7 +496,7 @@ export function Inspector({
                         <Button
                           size="icon-sm"
                           variant="ghost"
-                          aria-label={`Delete word ${i + 1}`}
+                          aria-label={t("ed.deleteWordN", { n: i + 1 })}
                           className="size-7 text-muted-foreground hover:text-destructive"
                           onClick={() =>
                             update((d) => ({
@@ -509,7 +510,7 @@ export function Inspector({
                       </span>
                       <div className="col-start-2 col-span-2 flex items-center gap-1.5 px-1.5 text-[11px] text-muted-foreground tabular-nums">
                         <input
-                          aria-label={`Word ${i + 1} start`}
+                          aria-label={t("ed.wordNStart", { n: i + 1 })}
                           className="w-14 [appearance:textfield] rounded-sm bg-transparent px-1 outline-none hover:bg-background focus:bg-background focus:ring-2 focus:ring-ring/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           type="number"
                           min={0}
@@ -539,7 +540,7 @@ export function Inspector({
                         />
                         <span aria-hidden>→</span>
                         <input
-                          aria-label={`Word ${i + 1} end`}
+                          aria-label={t("ed.wordNEnd", { n: i + 1 })}
                           className="w-14 [appearance:textfield] rounded-sm bg-transparent px-1 outline-none hover:bg-background focus:bg-background focus:ring-2 focus:ring-ring/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           type="number"
                           min={word.start + 0.01}
@@ -583,7 +584,7 @@ export function Inspector({
                       ...d.words,
                       {
                         id: uid(),
-                        text: "New",
+                        text: t("ed.newWord"),
                         start: Math.min(time, asset.duration - 0.1),
                         end: Math.min(asset.duration, time + 0.5),
                         highlight: false,
@@ -593,20 +594,20 @@ export function Inspector({
                 }
               >
                 <Plus />
-                Add word at playhead
+                {t("ed.addWord")}
               </Button>
             </Section>
           </TabsContent>
           <TabsContent value="framing" className="space-y-6 p-4">
             <Section
-              title="Framing"
-              description="Drag the video in the preview to keep your subject in focus."
+              title={t("ed.framing")}
+              description={t("ed.framingDesc")}
             >
-              <Field label="Aspect ratio">
+              <Field label={t("ed.aspect")}>
                 <ToggleGroup
                   type="single"
                   variant="outline"
-                  aria-label="Aspect ratio"
+                  aria-label={t("ed.aspect")}
                   className="w-full"
                   value={doc.framing.aspect}
                   onValueChange={(aspect) =>
@@ -622,30 +623,30 @@ export function Inspector({
                 >
                   {(
                     [
-                      ["vertical", "9:16", "Vertical"],
-                      ["square", "1:1", "Square"],
-                      ["original", "Src", "Original"],
+                      ["vertical", "9:16", "ed.aspect.vertical"],
+                      ["square", "1:1", "ed.aspect.square"],
+                      ["original", "ed.aspect.src", "ed.aspect.original"],
                     ] as const
                   ).map(([value, ratio, label]) => (
                     <ToggleGroupItem
                       key={value}
                       value={value}
-                      aria-label={label}
+                      aria-label={t(label)}
                       className="h-auto flex-1 flex-col gap-0.5 py-2"
                     >
-                      <span className="text-sm font-semibold">{ratio}</span>
+                      <span className="text-sm font-semibold">{ratio.startsWith("ed.") ? t(ratio as "ed.aspect.src") : ratio}</span>
                       <span className="text-[11px] font-normal text-muted-foreground">
-                        {label}
+                        {t(label)}
                       </span>
                     </ToggleGroupItem>
                   ))}
                 </ToggleGroup>
               </Field>
-              <Field label="Fit">
+              <Field label={t("ed.fit")}>
                 <ToggleGroup
                   type="single"
                   variant="outline"
-                  aria-label="Fit"
+                  aria-label={t("ed.fit")}
                   className="w-full"
                   value={doc.framing.fit}
                   onValueChange={(fit) =>
@@ -660,18 +661,18 @@ export function Inspector({
                   }
                 >
                   <ToggleGroupItem value="cover" className="flex-1 text-xs">
-                    Fill frame
+                    {t("ed.fit.cover")}
                   </ToggleGroupItem>
                   <ToggleGroupItem value="contain" className="flex-1 text-xs">
-                    Fit full video
+                    {t("ed.fit.contain")}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </Field>
             </Section>
             <Separator />
-            <Section title="Position">
+            <Section title={t("ed.position")}>
               <Range
-                label="Zoom"
+                label={t("ed.zoom")}
                 min={1}
                 max={3}
                 step={0.01}
@@ -685,7 +686,7 @@ export function Inspector({
                 }
               />
               <Range
-                label="Horizontal position"
+                label={t("ed.hPos")}
                 min={0}
                 max={100}
                 value={doc.framing.x * 100}
@@ -698,7 +699,7 @@ export function Inspector({
                 }
               />
               <Range
-                label="Vertical position"
+                label={t("ed.vPos")}
                 min={0}
                 max={100}
                 value={doc.framing.y * 100}
@@ -722,25 +723,25 @@ export function Inspector({
                 }
               >
                 <AlignCenter />
-                Center subject
+                {t("ed.center")}
               </Button>
             </Section>
           </TabsContent>
           <TabsContent value="audio" className="space-y-6 p-4">
             <Section
-              title="Audio"
-              description="Audio changes are included in your export."
+              title={t("ed.audio")}
+              description={t("ed.audioDesc")}
             >
               {!asset.hasAudio && (
                 <Alert>
                   <Info />
                   <AlertDescription>
-                    This clip has no audio track.
+                    {t("ed.noAudio")}
                   </AlertDescription>
                 </Alert>
               )}
               <Range
-                label="Volume"
+                label={t("ed.volume")}
                 value={doc.volume * 100}
                 min={0}
                 max={200}
@@ -751,22 +752,21 @@ export function Inspector({
               />
               <SwitchRow
                 id="mute-export"
-                label="Mute export audio"
+                label={t("ed.muteExport")}
                 checked={doc.muted}
                 onChange={(muted) => update((d) => ({ ...d, muted }))}
               />
               {doc.volume > 1 && (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Boosting quiet audio can clip loud peaks. Listen through
-                  before exporting.
+                  {t("ed.boost")}
                 </p>
               )}
             </Section>
           </TabsContent>
           <TabsContent value="effects" className="space-y-6 p-4">
             <Section
-              title="Effects"
-              description="Effects apply to the video. Captions stay crisp."
+              title={t("ed.effects")}
+              description={t("ed.effectsDesc")}
               action={
                 <Button
                   size="sm"
@@ -777,22 +777,22 @@ export function Inspector({
                   }
                 >
                   <RotateCcw />
-                  Reset
+                  {t("ed.reset")}
                 </Button>
               }
             >
               {(
                 [
-                  ["Brightness", "brightness", 40, 180, 1],
-                  ["Contrast", "contrast", 40, 180, 1],
-                  ["Saturation", "saturation", 0, 220, 1],
-                  ["Blur", "blur", 0, 8, 0.1],
-                  ["Hue", "hue", -180, 180, 1],
+                  ["ed.fx.brightness", "brightness", 40, 180, 1],
+                  ["ed.fx.contrast", "contrast", 40, 180, 1],
+                  ["ed.fx.saturation", "saturation", 0, 220, 1],
+                  ["ed.fx.blur", "blur", 0, 8, 0.1],
+                  ["ed.fx.hue", "hue", -180, 180, 1],
                 ] as const
               ).map(([label, key, min, max, step]) => (
                 <Range
                   key={key}
-                  label={label}
+                  label={t(label)}
                   value={doc.effects[key]}
                   min={min}
                   max={max}

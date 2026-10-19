@@ -32,6 +32,7 @@ import {
 import { useSession } from "@/lib/auth-client";
 import { formatSupportMessage, parseApiError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import {
   PlayCircle,
   Plus,
@@ -58,6 +59,7 @@ async function buildSupportError(response: Response, fallbackMessage: string) {
 }
 
 export default function ListPage() {
+  const t = useT();
   const { data: session, isPending } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -105,14 +107,14 @@ export default function ListPage() {
         );
       } catch (err) {
         console.error("Error fetching tasks:", err);
-        setError(err instanceof Error ? err.message : "Failed to load tasks");
+        setError(err instanceof Error ? err.message : t("lib.err.load"));
       } finally {
         setIsLoading(false);
       }
     };
 
     void loadTasks();
-  }, [session?.user?.id]);
+  }, [session?.user?.id, t]);
 
   const refreshTasks = useCallback(async () => {
     const nextTasks = await fetchTasksList();
@@ -234,7 +236,7 @@ export default function ListPage() {
         message:
           refreshError instanceof Error
             ? refreshError.message
-            : "The batch action finished, but the list could not be refreshed.",
+            : t("lib.err.refresh"),
       });
     } finally {
       setActiveBatchAction(null);
@@ -251,10 +253,10 @@ export default function ListPage() {
       targetTaskIds,
       (taskId) => fetch(`/api/tasks/${taskId}/cancel`, { method: "POST" }),
       {
-        empty: "No active generations in selection to cancel.",
-        fallback: "Failed to cancel generation",
-        success: (count) => `${count} generation${count === 1 ? "" : "s"} cancelled.`,
-        partial: (s, f, err) => `${s} cancelled, ${f} failed. ${err}`,
+        empty: t("lib.batch.cancel.empty"),
+        fallback: t("lib.batch.cancel.fallback"),
+        success: (count) => t(count === 1 ? "lib.batch.cancel.one" : "lib.batch.cancel.many", { count }),
+        partial: (s, f, err) => t("lib.batch.cancel.partial", { s, f, err }),
       },
     );
   };
@@ -269,10 +271,10 @@ export default function ListPage() {
       targetTaskIds,
       (taskId) => fetch(`/api/tasks/${taskId}/resume`, { method: "POST" }),
       {
-        empty: "No failed or cancelled generations in selection to resume.",
-        fallback: "Failed to resume generation",
-        success: (count) => `${count} generation${count === 1 ? "" : "s"} resumed.`,
-        partial: (s, f, err) => `${s} resumed, ${f} failed. ${err}`,
+        empty: t("lib.batch.resume.empty"),
+        fallback: t("lib.batch.resume.fallback"),
+        success: (count) => t(count === 1 ? "lib.batch.resume.one" : "lib.batch.resume.many", { count }),
+        partial: (s, f, err) => t("lib.batch.resume.partial", { s, f, err }),
       },
     );
   };
@@ -285,10 +287,10 @@ export default function ListPage() {
       targetTaskIds,
       (taskId) => fetch(`/api/tasks/${taskId}`, { method: "DELETE" }),
       {
-        empty: "Select at least one generation to delete.",
-        fallback: "Failed to delete generation",
-        success: (count) => `${count} generation${count === 1 ? "" : "s"} deleted.`,
-        partial: (s, f, err) => `${s} deleted, ${f} failed. ${err}`,
+        empty: t("lib.batch.delete.empty"),
+        fallback: t("lib.batch.delete.fallback"),
+        success: (count) => t(count === 1 ? "lib.batch.delete.one" : "lib.batch.delete.many", { count }),
+        partial: (s, f, err) => t("lib.batch.delete.partial", { s, f, err }),
       },
     );
 
@@ -303,12 +305,12 @@ export default function ListPage() {
     return (
       <div className="min-h-screen bg-white">
         <div className="max-w-4xl mx-auto px-4 py-24 text-center">
-          <h1 className="text-3xl font-bold text-black mb-4">Sign In Required</h1>
+          <h1 className="text-3xl font-bold text-black mb-4">{t("lib.signInRequired")}</h1>
           <p className="text-gray-600 mb-8">
-            You need to be signed in to view your generations.
+            {t("lib.signInBody")}
           </p>
           <Link href="/sign-in">
-            <Button size="lg">Sign In</Button>
+            <Button size="lg">{t("lib.signIn")}</Button>
           </Link>
         </div>
       </div>
@@ -326,10 +328,10 @@ export default function ListPage() {
     return true;
   });
   const filters: { id: typeof filter; label: string; count: number }[] = [
-    { id: "all", label: "All", count: tasks.length },
-    { id: "ready", label: "Ready", count: completedCount },
-    { id: "active", label: "In progress", count: activeCount },
-    { id: "attention", label: "Needs attention", count: attentionCount },
+    { id: "all", label: t("lib.filter.all"), count: tasks.length },
+    { id: "ready", label: t("lib.filter.ready"), count: completedCount },
+    { id: "active", label: t("lib.filter.active"), count: activeCount },
+    { id: "attention", label: t("lib.filter.attention"), count: attentionCount },
   ];
 
   const renderGenerationGrid = (items: Task[]) => (
@@ -351,9 +353,9 @@ export default function ListPage() {
     <main className={cn("mx-auto w-full max-w-7xl px-4 py-8 sm:px-8 md:py-10", selectedCount > 0 && "pb-32")}>
       <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">Library</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">{t("lib.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {tasks.length} {tasks.length === 1 ? "generation" : "generations"} · hover to preview, select to batch-manage
+            {t(tasks.length === 1 ? "lib.countOne" : "lib.countMany", { count: tasks.length })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -363,21 +365,21 @@ export default function ListPage() {
               ref={searchRef}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by title"
-              aria-label="Search generations"
+              placeholder={t("lib.searchPlaceholder")}
+              aria-label={t("lib.searchAria")}
               className="h-9 rounded-lg bg-background pl-9 pr-8"
             />
             <Kbd className="absolute right-2 top-1/2 -translate-y-1/2">/</Kbd>
           </div>
           <Button asChild size="sm" className="h-9 rounded-lg">
-            <Link href="/"><Plus className="size-4" /><span className="hidden sm:inline">New</span></Link>
+            <Link href="/"><Plus className="size-4" /><span className="hidden sm:inline">{t("lib.new")}</span></Link>
           </Button>
         </div>
       </div>
 
       {!isLoading && !error && tasks.length > 0 && (
         <div className="scrollbar-none -mx-4 mt-6 flex items-center gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          <div className="flex shrink-0 items-center gap-1.5" role="tablist" aria-label="Filter generations">
+          <div className="flex shrink-0 items-center gap-1.5" role="tablist" aria-label={t("lib.filterAria")}>
             {filters.map((item) => (
               <button
                 key={item.id}
@@ -395,8 +397,8 @@ export default function ListPage() {
               </button>
             ))}
           </div>
-          <div className="ml-auto inline-flex shrink-0 rounded-lg border bg-background p-0.5" role="tablist" aria-label="Sort generations">
-            {([["newest", "Newest"], ["video", "By video"]] as const).map(([value, label]) => (
+          <div className="ml-auto inline-flex shrink-0 rounded-lg border bg-background p-0.5" role="tablist" aria-label={t("lib.sortAria")}>
+            {([["newest", t("lib.sort.newest")], ["video", t("lib.sort.video")]] as const).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -418,10 +420,10 @@ export default function ListPage() {
               checked={allVisibleSelected ? true : someSelected ? "indeterminate" : false}
               onCheckedChange={handleToggleAllVisible}
               disabled={activeBatchAction !== null}
-              aria-label="Select all generations"
+              aria-label={t("lib.selectAllAria")}
             />
             <label htmlFor="select-all" className="text-xs text-muted-foreground">
-              {selectedCount > 0 ? `${selectedCount} of ${tasks.length} selected` : "Select all"}
+              {selectedCount > 0 ? t("lib.selectedOf", { selected: selectedCount, total: tasks.length }) : t("lib.selectAll")}
             </label>
           </div>
         </div>
@@ -447,13 +449,13 @@ export default function ListPage() {
         ) : tasks.length === 0 ? (
           <div className="flex flex-col items-center rounded-2xl border border-dashed px-6 py-20 text-center">
             <span className="flex size-14 items-center justify-center rounded-2xl bg-muted"><PlayCircle className="size-7 text-muted-foreground" /></span>
-            <h2 className="mt-4 text-lg font-semibold">No generations yet</h2>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">Paste a YouTube link or upload a video and your clips will land here.</p>
-            <Button asChild className="mt-6"><Link href="/">Create New Generation</Link></Button>
+            <h2 className="mt-4 text-lg font-semibold">{t("lib.empty.title")}</h2>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">{t("lib.empty.body")}</p>
+            <Button asChild className="mt-6"><Link href="/">{t("lib.empty.cta")}</Link></Button>
           </div>
         ) : visibleTasks.length === 0 ? (
           <p className="rounded-2xl border border-dashed px-6 py-16 text-center text-sm text-muted-foreground">
-            Nothing matches{query ? ` “${search.trim()}”` : " this filter"}.
+            {query ? t("lib.noMatchQuery", { query: search.trim() }) : t("lib.noMatchFilter")}
           </p>
         ) : sort === "video" ? (
           <div className="space-y-8">
@@ -485,13 +487,13 @@ export default function ListPage() {
                 checked={allVisibleSelected ? true : someSelected ? "indeterminate" : false}
                 onCheckedChange={handleToggleAllVisible}
                 disabled={activeBatchAction !== null}
-                aria-label="Select all"
+                aria-label={t("lib.selectAllShort")}
                 className="border-stone-600 data-[state=checked]:bg-white data-[state=checked]:text-stone-950 data-[state=checked]:border-white data-[state=indeterminate]:bg-stone-500 data-[state=indeterminate]:border-stone-500"
               />
               <span className="text-sm font-medium text-white tabular-nums">
                 {selectedCount}
                 <span className="text-stone-400 ml-0.5">
-                  {" "}selected
+                  {" "}{t("lib.selected")}
                 </span>
               </span>
             </div>
@@ -514,14 +516,14 @@ export default function ListPage() {
                     ) : (
                       <PauseCircle className="w-4 h-4" />
                     )}
-                    <span className="hidden sm:inline">Cancel</span>
+                    <span className="hidden sm:inline">{t("lib.cancel")}</span>
                     {cancelableCount > 0 && (
                       <span className="text-xs text-stone-500">{cancelableCount}</span>
                     )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={8}>
-                  Cancel {cancelableCount} active generation{cancelableCount === 1 ? "" : "s"}
+                  {t(cancelableCount === 1 ? "lib.cancelTip.one" : "lib.cancelTip.many", { count: cancelableCount })}
                 </TooltipContent>
               </Tooltip>
 
@@ -539,14 +541,14 @@ export default function ListPage() {
                     ) : (
                       <RotateCcw className="w-4 h-4" />
                     )}
-                    <span className="hidden sm:inline">Resume</span>
+                    <span className="hidden sm:inline">{t("lib.resume")}</span>
                     {resumableCount > 0 && (
                       <span className="text-xs text-stone-500">{resumableCount}</span>
                     )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={8}>
-                  Resume {resumableCount} failed/cancelled generation{resumableCount === 1 ? "" : "s"}
+                  {t(resumableCount === 1 ? "lib.resumeTip.one" : "lib.resumeTip.many", { count: resumableCount })}
                 </TooltipContent>
               </Tooltip>
 
@@ -566,11 +568,11 @@ export default function ListPage() {
                     ) : (
                       <Trash2 className="w-4 h-4" />
                     )}
-                    <span className="hidden sm:inline">Delete</span>
+                    <span className="hidden sm:inline">{t("lib.delete")}</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={8}>
-                  Delete {selectedCount} generation{selectedCount === 1 ? "" : "s"}
+                  {t(selectedCount === 1 ? "lib.deleteTip.one" : "lib.deleteTip.many", { count: selectedCount })}
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -589,13 +591,13 @@ export default function ListPage() {
                   }}
                   disabled={activeBatchAction !== null}
                   className="text-stone-400 hover:text-white hover:bg-stone-800 rounded-xl"
-                  aria-label="Clear selection"
+                  aria-label={t("lib.clearSelection")}
                 >
                   <X className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={8}>
-                Clear selection
+                {t("lib.clearSelection")}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -606,14 +608,13 @@ export default function ListPage() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selectedCount} generation{selectedCount === 1 ? "" : "s"}?</AlertDialogTitle>
+            <AlertDialogTitle>{t(selectedCount === 1 ? "lib.deleteTitle.one" : "lib.deleteTitle.many", { count: selectedCount })}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove {selectedCount === 1 ? "this generation" : "these generations"} and all
-              associated clips. This cannot be undone.
+              {t(selectedCount === 1 ? "lib.deleteBody.one" : "lib.deleteBody.many")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={activeBatchAction === "delete"}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={activeBatchAction === "delete"}>{t("lib.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void handleDeleteSelected()}
               disabled={activeBatchAction === "delete" || selectedCount === 0}
@@ -622,10 +623,10 @@ export default function ListPage() {
               {activeBatchAction === "delete" ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Deleting...
+                  {t("lib.deleting")}
                 </>
               ) : (
-                "Delete"
+                t("lib.delete")
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

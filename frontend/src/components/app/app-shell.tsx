@@ -13,25 +13,29 @@ import { useBillingSummary } from "@/hooks/use-billing-summary";
 import { useSocialAccess } from "@/hooks/use-social-access";
 import { formatBillingPlanName } from "@/lib/billing-plans";
 import { getUpgradeState } from "@/components/billing/upgrade-prompt";
-import { fetchGenerations, timeAgo, type GenerationSummary } from "@/lib/generations";
+import { fetchGenerations, type GenerationSummary } from "@/lib/generations";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Announcements } from "@/components/announcements";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useLocale, useT, useTimeAgo } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/en";
 import { cn } from "@/lib/utils";
 
 // `mobile: false` keeps an item out of the five-slot mobile tab bar.
 // `social: true` items only show when social publishing is enabled for the user.
-type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; mobile?: boolean; social?: boolean };
+type NavItem = { href: string; label: MessageKey; icon: typeof Film; match: (path: string) => boolean; mobile?: boolean; social?: boolean };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Create", icon: Sparkles, match: (p) => p === "/" },
-  { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
-  { href: "/settings/social", label: "Social", icon: Share2, match: (p) => p.startsWith("/settings/social"), social: true },
-  { href: "/analytics", label: "Analytics", icon: ChartColumn, match: (p) => p.startsWith("/analytics"), social: true },
-  { href: "/settings/api-keys", label: "Agents & API", icon: Bot, match: (p) => p.startsWith("/settings/api-keys"), mobile: false },
-  { href: "/settings", label: "Settings", icon: Settings, match: (p) => p === "/settings" },
+  { href: "/", label: "nav.create", icon: Sparkles, match: (p) => p === "/" },
+  { href: "/list", label: "nav.library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/settings/social", label: "nav.social", icon: Share2, match: (p) => p.startsWith("/settings/social"), social: true },
+  { href: "/analytics", label: "nav.analytics", icon: ChartColumn, match: (p) => p.startsWith("/analytics"), social: true },
+  { href: "/settings/api-keys", label: "nav.api", icon: Bot, match: (p) => p.startsWith("/settings/api-keys"), mobile: false },
+  { href: "/settings", label: "nav.settings", icon: Settings, match: (p) => p === "/settings" },
 ];
 
 function initials(name?: string | null, email?: string | null) {
@@ -44,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const t = useT();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [billing] = useBillingSummary(Boolean(session?.user));
   // The editor needs every pixel — collapse the sidebar to an icon rail there.
@@ -74,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const socialAccess = useSocialAccess(Boolean(user));
   const nav = NAV.filter((item) => !item.social || socialAccess);
   const mobileNav = nav.filter((item) => item.mobile !== false);
-  const items = admin ? [...nav, { href: "/admin", label: "Admin", icon: Shield, match: (p: string) => p.startsWith("/admin") }] : nav;
+  const items = admin ? [...nav, { href: "/admin", label: "nav.admin" as const, icon: Shield, match: (p: string) => p.startsWith("/admin") }] : nav;
 
   return (
     <div data-app-shell={user ? "" : undefined} className={cn(user && "flex min-h-dvh bg-canvas")}>
@@ -89,15 +94,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!compact && "SupoClip"}
         </Link>
 
-        <SidebarLink compact={compact} href="/" label="New generation" shortcut="N" className="mb-4 mt-1 bg-foreground text-background hover:bg-foreground/90 hover:text-background">
+        <SidebarLink compact={compact} href="/" label={t("nav.newGeneration")} shortcut="N" className="mb-4 mt-1 bg-foreground text-background hover:bg-foreground/90 hover:text-background">
           <Plus className="size-4" />
         </SidebarLink>
 
-        <nav aria-label="Main navigation" className="flex w-full flex-col gap-0.5">
+        <nav aria-label={t("nav.main")} className="flex w-full flex-col gap-0.5">
           {items.map((item) => {
             const active = item.match(pathname);
             return (
-              <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active}>
+              <SidebarLink key={item.href} compact={compact} href={item.href} label={t(item.label)} active={active}>
                 <item.icon className="size-4" />
               </SidebarLink>
             );
@@ -111,15 +116,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             "mt-4 flex h-9 w-full items-center gap-2 rounded-lg border border-sidebar-border bg-background text-sm text-muted-foreground transition-colors hover:text-foreground",
             compact ? "justify-center px-0" : "px-2.5",
           )}
-          aria-label="Search generations"
+          aria-label={t("nav.searchGenerations")}
         >
           <Search className="size-4 shrink-0" />
-          {!compact && <><span className="flex-1 text-left">Search</span><Kbd>⌘K</Kbd></>}
+          {!compact && <><span className="flex-1 text-left">{t("nav.search")}</span><Kbd>⌘K</Kbd></>}
         </button>
 
         <div className="mt-auto w-full space-y-2 pb-3">
           <Announcements key={user.id} userId={user.id} compact={compact} />
           {!compact && billing?.monetization_enabled && <UsageCard billing={billing} />}
+          <LanguageSwitcher className={compact ? "hidden" : "flex w-full [&_select]:w-full"} />
           <UserRow compact={compact} name={user.name} email={user.email} />
         </div>
       </aside> : null}
@@ -131,7 +137,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="flex items-center gap-1">
             <Announcements key={user.id} userId={user.id} compact />
-            <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search generations" className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
+            <LanguageSwitcher />
+            <ThemeToggle className="p-2 hover:bg-accent [&_svg]:size-5" />
+            <button type="button" onClick={() => setPaletteOpen(true)} aria-label={t("nav.searchGenerations")} className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
               <Search className="size-5" />
             </button>
           </div>
@@ -139,13 +147,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {user ? <nav aria-label="Mobile navigation" style={{ gridTemplateColumns: `repeat(${mobileNav.length}, minmax(0, 1fr))` }} className="fixed inset-x-0 bottom-0 z-40 grid border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {user ? <nav aria-label={t("nav.mobile")} style={{ gridTemplateColumns: `repeat(${mobileNav.length}, minmax(0, 1fr))` }} className="fixed inset-x-0 bottom-0 z-40 grid border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {mobileNav.map((item) => {
           const active = item.match(pathname);
           return (
             <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}
               className={cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground")}>
-              <item.icon className={cn("size-5", active && "text-brand")} />{item.label}
+              <item.icon className={cn("size-5", active && "text-brand")} />{t(item.label)}
             </Link>
           );
         })}
@@ -181,18 +189,20 @@ function SidebarLink({ href, label, active, compact, shortcut, className, childr
 }
 
 function UsageCard({ billing }: { billing: NonNullable<ReturnType<typeof useBillingSummary>[0]> }) {
+  const t = useT();
+  const locale = useLocale();
   const limit = billing.usage_limit;
   const pct = limit ? Math.min(100, (billing.usage_count / limit) * 100) : 0;
-  const upgrade = getUpgradeState(billing);
+  const upgrade = getUpgradeState(billing, t, locale);
   const nudge = !upgrade?.isPaid
-    ? "Pick a plan to start clipping"
+    ? t("usage.pickPlan")
     : upgrade.nextPlan && (upgrade.atLimit || upgrade.nearLimit)
-    ? `Get more with ${upgrade.nextPlan.name}`
+    ? t("usage.getMore", { plan: upgrade.nextPlan.name })
     : null;
   return (
     <Link href="/settings#plan" className="group block rounded-xl border border-sidebar-border bg-background p-3 text-xs transition-colors hover:border-foreground/20">
       <div className="flex items-center justify-between">
-        <span className="font-semibold">{formatBillingPlanName(billing.plan)}</span>
+        <span className="font-semibold">{formatBillingPlanName(billing.plan, t)}</span>
         <span className="text-muted-foreground tabular-nums">{billing.usage_count}{limit ? ` / ${limit}` : ""}</span>
       </div>
       {limit ? (
@@ -206,18 +216,19 @@ function UsageCard({ billing }: { billing: NonNullable<ReturnType<typeof useBill
           <ArrowRight className="ml-auto size-3 transition-transform group-hover:translate-x-0.5" />
         </p>
       ) : (
-        <p className="mt-2 text-muted-foreground">{limit && upgrade?.remaining !== null ? `${upgrade?.remaining} left this period` : "videos this period"}</p>
+        <p className="mt-2 text-muted-foreground">{limit && upgrade?.remaining !== null ? t("usage.left", { count: upgrade?.remaining ?? 0 }) : t("usage.videosThisPeriod")}</p>
       )}
     </Link>
   );
 }
 
 function UserRow({ compact, name, email }: { compact: boolean; name?: string | null; email?: string | null }) {
+  const t = useT();
   const [signingOut, setSigningOut] = useState(false);
   const handleSignOut = async () => {
     setSigningOut(true);
     try { await signOut(); window.location.assign("/sign-in"); }
-    catch { toast.error("Could not sign out. Please try again."); setSigningOut(false); }
+    catch { toast.error(t("user.signOutFailed")); setSigningOut(false); }
   };
   return (
     <div className={cn("flex items-center gap-2 rounded-lg", compact ? "flex-col" : "px-1.5 py-1")}>
@@ -226,18 +237,19 @@ function UserRow({ compact, name, email }: { compact: boolean; name?: string | n
       </span>
       {!compact && (
         <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-sm font-medium">{name || "Creator"}</p>
+          <p className="truncate text-sm font-medium">{name || t("user.defaultName")}</p>
           <p className="truncate text-xs text-muted-foreground">{email}</p>
         </div>
       )}
+      <ThemeToggle />
       <Tooltip>
         <TooltipTrigger asChild>
-          <button type="button" onClick={() => void handleSignOut()} disabled={signingOut} aria-label="Sign out"
+          <button type="button" onClick={() => void handleSignOut()} disabled={signingOut} aria-label={t("user.signOut")}
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50">
             <LogOut className="size-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent side={compact ? "right" : "top"}>{signingOut ? "Signing out…" : "Sign out"}</TooltipContent>
+        <TooltipContent side={compact ? "right" : "top"}>{signingOut ? t("user.signingOut") : t("user.signOut")}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -246,6 +258,8 @@ function UserRow({ compact, name, email }: { compact: boolean; name?: string | n
 type PaletteEntry = { id: string; label: string; hint?: string; href: string; icon: typeof Film; generation?: GenerationSummary };
 
 function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const t = useT();
+  const timeAgo = useTimeAgo();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [generations, setGenerations] = useState<GenerationSummary[]>([]);
@@ -263,12 +277,12 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const entries = useMemo<PaletteEntry[]>(() => {
     const q = query.trim().toLowerCase();
     const actions: PaletteEntry[] = [
-      { id: "new", label: "New generation", hint: "Paste a link or upload", href: "/", icon: Plus },
-      { id: "library", label: "Open library", href: "/list", icon: Film },
-      ...(socialAccess ? [{ id: "social", label: "Social accounts", hint: "Connect YouTube, TikTok & Instagram", href: "/settings/social", icon: Share2 },
-      { id: "analytics", label: "Analytics", hint: "How your published clips perform", href: "/analytics", icon: ChartColumn }] : []),
-      { id: "keys", label: "Agents & API", hint: "API keys & MCP", href: "/settings/api-keys", icon: Bot },
-      { id: "settings", label: "Settings", href: "/settings", icon: Settings },
+      { id: "new", label: t("nav.newGeneration"), hint: t("palette.newHint"), href: "/", icon: Plus },
+      { id: "library", label: t("palette.openLibrary"), href: "/list", icon: Film },
+      ...(socialAccess ? [{ id: "social", label: t("palette.socialAccounts"), hint: t("palette.socialHint"), href: "/settings/social", icon: Share2 },
+      { id: "analytics", label: t("nav.analytics"), hint: t("palette.analyticsHint"), href: "/analytics", icon: ChartColumn }] : []),
+      { id: "keys", label: t("nav.api"), hint: "API keys & MCP", href: "/settings/api-keys", icon: Bot },
+      { id: "settings", label: t("nav.settings"), href: "/settings", icon: Settings },
     ].filter((entry) => !q || entry.label.toLowerCase().includes(q));
     const matches = generations
       .filter((generation) => !q || generation.source_title.toLowerCase().includes(q))
@@ -278,7 +292,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
         href: `/tasks/${generation.id}`, icon: Film, generation,
       }));
     return [...actions, ...matches];
-  }, [generations, query, socialAccess]);
+  }, [generations, query, socialAccess, t, timeAgo]);
 
   const go = useCallback((entry: PaletteEntry | undefined) => {
     if (!entry) return;
@@ -293,7 +307,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="top-[18%] max-w-xl translate-y-0 gap-0 overflow-hidden p-0">
-        <DialogTitle className="sr-only">Search</DialogTitle>
+        <DialogTitle className="sr-only">{t("palette.title")}</DialogTitle>
         <div className="flex items-center gap-3 border-b px-4">
           <Search className="size-4 text-muted-foreground" />
           <input
@@ -305,14 +319,14 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
               if (event.key === "ArrowUp") { event.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
               if (event.key === "Enter") { event.preventDefault(); go(entries[active]); }
             }}
-            placeholder="Search generations or jump to…"
-            aria-label="Search generations or jump to a page"
+            placeholder={t("palette.placeholder")}
+            aria-label={t("palette.aria")}
             className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <Kbd>esc</Kbd>
         </div>
         <div ref={listRef} className="max-h-80 overflow-y-auto p-1.5" role="listbox">
-          {entries.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">Nothing matches “{query}”.</p>}
+          {entries.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t("palette.empty", { query })}</p>}
           {entries.map((entry, index) => (
             <button
               key={entry.id}

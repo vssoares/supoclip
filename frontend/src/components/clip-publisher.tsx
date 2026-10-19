@@ -45,12 +45,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SocialProviderIcon } from "@/components/social-provider-icon";
-import { timeAgo } from "@/lib/generations";
+import { useLocale, useT, useTimeAgo } from "@/lib/i18n";
+import type { Translate } from "@/lib/i18n";
 import {
   ACTIVE_POST_STATUSES,
-  PRIVACY_LABELS,
+  PRIVACY_LABEL_KEYS,
   PROVIDER_LABELS,
-  POST_STATUS_LABELS,
+  POST_STATUS_LABEL_KEYS,
   connectionLabel,
   formatDateTime,
   formatMetric,
@@ -118,41 +119,44 @@ function postAccountName(post: SocialPost): string {
   );
 }
 
-function metricsSummary(post: SocialPost): string | null {
+function metricsSummary(post: SocialPost, t: Translate): string | null {
   if (!post.last_metrics_at || !post.metrics) return null;
   const { views, likes, comments } = post.metrics;
-  const count = (value: number | null | undefined, noun: string) =>
-    `${formatMetric(value)} ${noun}${value === 1 ? "" : "s"}`;
-  return [count(views, "view"), count(likes, "like"), count(comments, "comment")].join(" · ");
+  const count = (value: number | null | undefined, one: "soc.view" | "soc.like" | "soc.comment", many: "soc.views" | "soc.likes" | "soc.comments") =>
+    `${formatMetric(value)} ${t(value === 1 ? one : many)}`;
+  return [count(views, "soc.view", "soc.views"), count(likes, "soc.like", "soc.likes"), count(comments, "soc.comment", "soc.comments")].join(" · ");
 }
 
 function PostStatus({ post }: { post: SocialPost }) {
+  const t = useT();
+  const locale = useLocale();
+  const timeAgo = useTimeAgo();
   switch (post.status) {
     case "queued":
     case "publishing":
       return (
         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" />
-          {post.status === "queued" ? "Starting upload…" : "Uploading…"}
+          {post.status === "queued" ? t("pub.starting") : t("pub.uploading")}
         </span>
       );
     case "scheduled":
       return (
         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
           <Clock className="size-3.5" />
-          {post.scheduled_for ? formatDateTime(post.scheduled_for) : "Scheduled"}
+          {post.scheduled_for ? formatDateTime(post.scheduled_for, locale) : t("soc.status.scheduled")}
         </span>
       );
     case "published":
       return (
         <span className="text-muted-foreground">
-          {post.published_at ? `Published ${timeAgo(post.published_at)}` : "Published"}
+          {post.published_at ? t("pub.publishedAgo", { when: timeAgo(post.published_at) }) : t("pub.published")}
         </span>
       );
     case "failed":
-      return <span className="text-destructive">Failed</span>;
+      return <span className="text-destructive">{t("soc.status.failed")}</span>;
     default:
-      return <span className="text-muted-foreground">{POST_STATUS_LABELS[post.status]}</span>;
+      return <span className="text-muted-foreground">{t(POST_STATUS_LABEL_KEYS[post.status])}</span>;
   }
 }
 
@@ -161,6 +165,7 @@ function PostStatus({ post }: { post: SocialPost }) {
  * "just happens" silently. Statuses seen on first load are only recorded.
  */
 export function useSocialPostToasts(posts: SocialPost[]) {
+  const t = useT();
   const seen = useRef<Map<string, SocialPostStatus> | null>(null);
   useEffect(() => {
     const previous = seen.current;
@@ -173,20 +178,20 @@ export function useSocialPostToasts(posts: SocialPost[]) {
       const id = postToastId(post.id);
       const platform = PROVIDER_LABELS[post.provider];
       if (post.status === "published") {
-        toast.success(`Published to ${platform}`, {
+        toast.success(t("pub.publishedTo", { platform }), {
           id,
-          description: post.privacy_level === "public" ? undefined : `Visibility: ${PRIVACY_LABELS[post.privacy_level]}`,
+          description: post.privacy_level === "public" ? undefined : t("pub.visibility", { level: t(PRIVACY_LABEL_KEYS[post.privacy_level]) }),
           action: post.external_url
-            ? { label: "Open", onClick: () => window.open(post.external_url!, "_blank", "noopener") }
+            ? { label: t("pub.open"), onClick: () => window.open(post.external_url!, "_blank", "noopener") }
             : undefined,
         });
       } else if (post.status === "failed") {
-        toast.error(`Couldn't publish to ${platform}`, { id, description: post.error_message ?? undefined });
+        toast.error(t("pub.couldntPublish", { platform }), { id, description: post.error_message ?? undefined });
       } else if (ACTIVE_POST_STATUSES.includes(post.status)) {
-        toast.loading(`Publishing to ${platform}…`, { id });
+        toast.loading(t("pub.publishingTo", { platform }), { id });
       }
     }
-  }, [posts]);
+  }, [posts, t]);
 }
 
 function postToastId(postId: string) {
@@ -194,6 +199,7 @@ function postToastId(postId: string) {
 }
 
 export function ClipPostList({ posts, onChanged }: ClipPostListProps) {
+  const t = useT();
   const [busyPostId, setBusyPostId] = useState<string | null>(null);
 
   const runPostAction = async (post: SocialPost, action: "cancel" | "retry" | "refresh-metrics" | "delete") => {
@@ -204,13 +210,13 @@ export function ClipPostList({ posts, onChanged }: ClipPostListProps) {
         { method: action === "delete" ? "DELETE" : "POST" },
       );
       if (!response.ok) {
-        toast.error(await readError(response, "Action failed"));
+        toast.error(await readError(response, t("pub.actionFailed")));
       } else if (action === "retry") {
-        toast.loading(`Publishing to ${PROVIDER_LABELS[post.provider]}…`, { id: postToastId(post.id) });
+        toast.loading(t("pub.publishingTo", { platform: PROVIDER_LABELS[post.provider] }), { id: postToastId(post.id) });
       } else if (action === "cancel") {
-        toast.success("Post cancelled");
+        toast.success(t("pub.postCancelled"));
       } else if (action === "refresh-metrics") {
-        toast.success("Metrics updated");
+        toast.success(t("pub.metricsUpdated"));
       }
       await onChanged();
     } finally {
@@ -224,7 +230,7 @@ export function ClipPostList({ posts, onChanged }: ClipPostListProps) {
     <div className="mt-3 space-y-2">
       {posts.map((post) => {
         const busy = busyPostId === post.id;
-        const metrics = metricsSummary(post);
+        const metrics = metricsSummary(post, t);
         const canCancel = post.status === "scheduled" || post.status === "queued";
         const canRetry = post.status === "failed" || post.status === "cancelled";
         const canRefresh = post.status === "published" && Boolean(post.external_post_id);
@@ -249,7 +255,7 @@ export function ClipPostList({ posts, onChanged }: ClipPostListProps) {
             </div>
             {post.status === "published" && post.external_url && (
               <Button asChild size="icon" variant="ghost" className="size-8 text-muted-foreground">
-                <a href={post.external_url} target="_blank" rel="noreferrer" aria-label="Open post">
+                <a href={post.external_url} target="_blank" rel="noreferrer" aria-label={t("pub.openPost")}>
                   <ExternalLink className="size-4" />
                 </a>
               </Button>
@@ -257,30 +263,30 @@ export function ClipPostList({ posts, onChanged }: ClipPostListProps) {
             {hasMenu && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground" disabled={busy} aria-label="Post actions">
+                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground" disabled={busy} aria-label={t("pub.postActions")}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {canRefresh && (
                     <DropdownMenuItem onSelect={() => runPostAction(post, "refresh-metrics")}>
-                      <RefreshCw /> Refresh metrics
+                      <RefreshCw /> {t("pub.refreshMetrics")}
                     </DropdownMenuItem>
                   )}
                   {canRetry && (
                     <DropdownMenuItem onSelect={() => runPostAction(post, "retry")}>
-                      <RotateCcw /> Try again
+                      <RotateCcw /> {t("pub.tryAgain")}
                     </DropdownMenuItem>
                   )}
                   {canCancel && (
                     <DropdownMenuItem onSelect={() => runPostAction(post, "cancel")}>
-                      <XCircle /> Cancel post
+                      <XCircle /> {t("pub.cancelPost")}
                     </DropdownMenuItem>
                   )}
                   {canRemove && (canRefresh || canRetry || canCancel) && <DropdownMenuSeparator />}
                   {canRemove && (
                     <DropdownMenuItem variant="destructive" onSelect={() => runPostAction(post, "delete")}>
-                      <Trash2 /> Remove from list
+                      <Trash2 /> {t("pub.remove")}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -300,6 +306,8 @@ export function ClipPublishButton({
   providers,
   onChanged,
 }: ClipPublishButtonProps) {
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [accountId, setAccountId] = useState<string>("");
   const [title, setTitle] = useState("");
@@ -331,7 +339,7 @@ export function ClipPublishButton({
       ? accountId
       : (activeConnections[0]?.id ?? "");
     setError(null);
-    setTitle(clip.hook_title || `Clip ${clip.clip_order}`);
+    setTitle(clip.hook_title || t("clip.title", { order: clip.clip_order }));
     setCaption(clip.text || "");
     setHashtags("");
     setSchedule(false);
@@ -351,7 +359,7 @@ export function ClipPublishButton({
 
   const handleSubmit = async () => {
     if (!accountId) {
-      setError("Choose an account to publish to.");
+      setError(t("pub.chooseAccount"));
       return;
     }
     setIsSubmitting(true);
@@ -369,7 +377,7 @@ export function ClipPublishButton({
       if (schedule && scheduledFor) {
         const when = new Date(scheduledFor);
         if (Number.isNaN(when.getTime())) {
-          throw new Error("Pick a valid date and time.");
+          throw new Error(t("pub.validDate"));
         }
         body.scheduled_for = when.toISOString();
       }
@@ -379,24 +387,24 @@ export function ClipPublishButton({
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        throw new Error(await readError(response, "Failed to publish clip"));
+        throw new Error(await readError(response, t("pub.failed")));
       }
       const { post } = (await response.json().catch(() => ({}))) as { post?: SocialPost };
       const platform = PROVIDER_LABELS[selectedConnection?.provider ?? "youtube"];
       if (body.scheduled_for) {
-        toast.success(`Scheduled for ${formatDateTime(String(body.scheduled_for))}`, {
+        toast.success(t("pub.scheduledFor", { when: formatDateTime(String(body.scheduled_for), locale) }), {
           description: `${platform} · ${selectedConnection ? connectionLabel(selectedConnection) : ""}`,
         });
       } else if (post?.id) {
-        toast.loading(`Publishing to ${platform}…`, {
+        toast.loading(t("pub.publishingTo", { platform }), {
           id: postToastId(post.id),
-          description: "You can keep working. We'll tell you when it's live.",
+          description: t("pub.keepWorking"),
         });
       }
       setOpen(false);
       await onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to publish clip");
+      setError(err instanceof Error ? err.message : t("pub.failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -406,15 +414,15 @@ export function ClipPublishButton({
     <>
       <Button size="sm" variant="outline" onClick={openSheet}>
         <Send className="w-4 h-4" />
-        Publish
+        {t("pub.publish")}
       </Button>
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Publish clip {clip.clip_order}</SheetTitle>
+            <SheetTitle>{t("pub.sheetTitle", { order: clip.clip_order })}</SheetTitle>
             <SheetDescription>
-              Post this clip straight to a connected account, or schedule it for later.
+              {t("pub.sheetDesc")}
             </SheetDescription>
           </SheetHeader>
 
@@ -428,19 +436,19 @@ export function ClipPublishButton({
 
             {activeConnections.length === 0 ? (
               <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                No social accounts connected yet.{" "}
+                {t("pub.noAccounts")}{" "}
                 <Link href="/settings/social" className="font-medium text-foreground underline underline-offset-4">
-                  Connect YouTube, TikTok or Instagram
+                  {t("pub.connectLink")}
                 </Link>{" "}
-                to publish from here.
+                {t("pub.toPublishFromHere")}
               </div>
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor={`publish-account-${clip.id}`}>Account</Label>
+                  <Label htmlFor={`publish-account-${clip.id}`}>{t("pub.account")}</Label>
                   <Select value={accountId} onValueChange={selectAccount}>
                     <SelectTrigger id={`publish-account-${clip.id}`} className="w-full">
-                      <SelectValue placeholder="Choose an account" />
+                      <SelectValue placeholder={t("pub.chooseAccountPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {activeConnections.map((connection) => (
@@ -451,7 +459,7 @@ export function ClipPublishButton({
                         >
                           <SocialProviderIcon provider={connection.provider} />
                           {PROVIDER_LABELS[connection.provider]} · {connectionLabel(connection)}
-                          {connection.status === "reauth_required" ? " (reconnect required)" : ""}
+                          {connection.status === "reauth_required" ? t("pub.reconnectRequired") : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -459,7 +467,7 @@ export function ClipPublishButton({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={`publish-title-${clip.id}`}>Title</Label>
+                  <Label htmlFor={`publish-title-${clip.id}`}>{t("pub.title")}</Label>
                   <Input
                     id={`publish-title-${clip.id}`}
                     value={title}
@@ -467,12 +475,12 @@ export function ClipPublishButton({
                     onChange={(event) => setTitle(event.target.value)}
                   />
                   {selectedConnection?.provider === "tiktok" && (
-                    <p className="text-xs text-muted-foreground">TikTok shows the caption, not the title.</p>
+                    <p className="text-xs text-muted-foreground">{t("pub.tiktokTitle")}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={`publish-caption-${clip.id}`}>Caption</Label>
+                  <Label htmlFor={`publish-caption-${clip.id}`}>{t("pub.caption")}</Label>
                   <Textarea
                     id={`publish-caption-${clip.id}`}
                     value={caption}
@@ -483,17 +491,17 @@ export function ClipPublishButton({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={`publish-hashtags-${clip.id}`}>Hashtags</Label>
+                  <Label htmlFor={`publish-hashtags-${clip.id}`}>{t("pub.hashtags")}</Label>
                   <Input
                     id={`publish-hashtags-${clip.id}`}
                     value={hashtags}
-                    placeholder="podcast, clips, shorts"
+                    placeholder={t("pub.hashtagsPlaceholder")}
                     onChange={(event) => setHashtags(event.target.value)}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={`publish-privacy-${clip.id}`}>Visibility</Label>
+                  <Label htmlFor={`publish-privacy-${clip.id}`}>{t("pub.visibilityLabel")}</Label>
                   <Select value={privacy} onValueChange={(value) => setPrivacy(value as SocialPrivacyLevel)}>
                     <SelectTrigger id={`publish-privacy-${clip.id}`} className="w-full">
                       <SelectValue />
@@ -501,28 +509,28 @@ export function ClipPublishButton({
                     <SelectContent>
                       {privacyOptions.map((option) => (
                         <SelectItem key={option} value={option}>
-                          {PRIVACY_LABELS[option]}
+                          {t(PRIVACY_LABEL_KEYS[option])}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {selectedConnection?.provider === "tiktok" && (
                     <p className="text-xs text-muted-foreground">
-                      Until TikTok audits the app, posts can only be private.
+                      {t("pub.tiktokPrivate")}
                     </p>
                   )}
                 </div>
 
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div>
-                    <p className="text-sm font-medium">Schedule for later</p>
-                    <p className="text-xs text-muted-foreground">Publish at a specific time.</p>
+                    <p className="text-sm font-medium">{t("pub.scheduleLater")}</p>
+                    <p className="text-xs text-muted-foreground">{t("pub.scheduleLaterDesc")}</p>
                   </div>
                   <Switch checked={schedule} onCheckedChange={setSchedule} />
                 </div>
                 {schedule && (
                   <div className="space-y-2">
-                    <Label htmlFor={`publish-when-${clip.id}`}>Publish at</Label>
+                    <Label htmlFor={`publish-when-${clip.id}`}>{t("pub.publishAt")}</Label>
                     <Input
                       id={`publish-when-${clip.id}`}
                       type="datetime-local"
@@ -538,12 +546,12 @@ export function ClipPublishButton({
 
           <SheetFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
-              Cancel
+              {t("pub.cancel")}
             </Button>
             {activeConnections.length > 0 && (
               <Button onClick={handleSubmit} disabled={isSubmitting || !accountId}>
                 {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : schedule ? <Clock className="size-4" /> : <Send className="size-4" />}
-                {isSubmitting ? (schedule ? "Scheduling…" : "Publishing…") : schedule ? "Schedule" : "Publish now"}
+                {isSubmitting ? (schedule ? t("pub.scheduling") : t("pub.publishing")) : schedule ? t("pub.schedule") : t("pub.publishNow")}
               </Button>
             )}
           </SheetFooter>

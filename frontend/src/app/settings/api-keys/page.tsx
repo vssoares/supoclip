@@ -12,17 +12,19 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient, useSession } from "@/lib/auth-client";
 import { GITHUB_URL } from "@/lib/site";
+import { useLocale, useT } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/en";
 
 const DOCS = [
   {
-    title: "Connect an agent",
-    description: "Set up the MCP server in Claude, Cursor and other MCP clients.",
+    title: "key.doc.agent" as MessageKey,
+    description: "key.doc.agentDesc" as MessageKey,
     href: `${GITHUB_URL}/blob/main/mcp/README.md`,
     icon: Bot,
   },
   {
-    title: "REST API reference",
-    description: "Endpoints, authentication and examples for direct API access.",
+    title: "key.doc.rest" as MessageKey,
+    description: "key.doc.restDesc" as MessageKey,
     href: `${GITHUB_URL}/blob/main/docs/api-reference.md#authenticating-with-api-keys`,
     icon: Braces,
   },
@@ -37,14 +39,16 @@ interface ApiKey {
   revoked: boolean;
 }
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null, locale: string): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString();
+  return date.toLocaleString(locale);
 }
 
 export default function ApiKeysPage() {
+  const t = useT();
+  const locale = useLocale();
   const { data: session, isPending, refetch } = useSession();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [isFetching, setIsFetching] = useState(true);
@@ -60,9 +64,9 @@ export default function ApiKeysPage() {
   useEffect(() => {
     const verificationError = new URLSearchParams(window.location.search).get("error");
     if (verificationError === "TOKEN_EXPIRED" || verificationError === "INVALID_TOKEN") {
-      setError("This verification link is invalid or expired. Request a new email below.");
+      setError(t("key.verifyExpired"));
     }
-  }, []);
+  }, [t]);
 
   const handleSendVerification = async () => {
     if (!session?.user.email) return;
@@ -73,10 +77,10 @@ export default function ApiKeysPage() {
         email: session.user.email,
         callbackURL: "/settings/api-keys",
       });
-      if (result.error) throw new Error(result.error.message || "Failed to send verification email");
+      if (result.error) throw new Error(result.error.message || t("key.sendFailed"));
       setVerificationSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send verification email");
+      setError(err instanceof Error ? err.message : t("key.sendFailed"));
     } finally {
       setIsSendingVerification(false);
     }
@@ -86,15 +90,15 @@ export default function ApiKeysPage() {
     setIsFetching(true);
     try {
       const response = await fetch("/api/api-keys", { cache: "no-store" });
-      if (!response.ok) throw new Error("Failed to load API keys");
+      if (!response.ok) throw new Error(t("key.loadFailed"));
       const data = await response.json();
       setKeys(data.api_keys || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load API keys");
+      setError(err instanceof Error ? err.message : t("key.loadFailed"));
     } finally {
       setIsFetching(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -112,17 +116,17 @@ export default function ApiKeysPage() {
       const response = await fetch("/api/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() || "API Key" }),
+        body: JSON.stringify({ name: name.trim() || t("key.defaultName") }),
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.detail || "Failed to create API key");
+        throw new Error(data?.detail || t("key.createFailed"));
       }
       setNewKey(data.api_key?.key ?? null);
       setName("");
       await loadKeys();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create API key");
+      setError(err instanceof Error ? err.message : t("key.createFailed"));
     } finally {
       setIsCreating(false);
     }
@@ -134,11 +138,11 @@ export default function ApiKeysPage() {
       const response = await fetch(`/api/api-keys/${id}`, { method: "DELETE" });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data?.detail || "Failed to revoke API key");
+        throw new Error(data?.detail || t("key.revokeFailed"));
       }
       await loadKeys();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to revoke API key");
+      setError(err instanceof Error ? err.message : t("key.revokeFailed"));
     }
   };
 
@@ -161,9 +165,9 @@ export default function ApiKeysPage() {
     return (
       <div className="min-h-screen bg-white">
         <div className="max-w-4xl mx-auto px-4 py-24 text-center">
-          <p className="text-gray-600 mb-4">Sign in to manage your API keys.</p>
+          <p className="text-gray-600 mb-4">{t("key.signIn")}</p>
           <Link href="/sign-in">
-            <Button>Sign In</Button>
+            <Button>{t("ss.signInBtn")}</Button>
           </Link>
         </div>
       </div>
@@ -174,11 +178,10 @@ export default function ApiKeysPage() {
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-8 md:py-10">
         <div>
           <div className="mb-8">
-            <h1 className="font-display text-3xl font-bold tracking-tight">Agents &amp; API</h1>
+            <h1 className="font-display text-3xl font-bold tracking-tight">{t("key.title")}</h1>
             <p className="mt-2 text-muted-foreground">
-              Let Claude, Cursor and other AI agents clip videos for you through the{" "}
-              <span className="font-medium text-foreground">SupoClip MCP server</span>, or call the REST API
-              from your own code. Treat keys like passwords; they grant full access to your account.
+              {t("key.introPre")}{" "}
+              <span className="font-medium text-foreground">{t("key.introMcp")}</span>{t("key.introPost")}
             </p>
           </div>
 
@@ -194,10 +197,10 @@ export default function ApiKeysPage() {
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"><doc.icon className="size-4" /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1 text-sm font-semibold">
-                    {doc.title}
+                    {t(doc.title)}
                     <ArrowUpRight className="size-3.5 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                   </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{doc.description}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{t(doc.description)}</span>
                 </span>
               </a>
             ))}
@@ -213,17 +216,17 @@ export default function ApiKeysPage() {
           {!emailVerified && (
             <Alert className="mb-6">
               <AlertDescription>
-                <p className="font-medium">Verify your email to create API keys</p>
-                <p className="mt-1">Confirm that you own {session.user.email}. You can still view and revoke existing keys.</p>
+                <p className="font-medium">{t("key.verifyTitle")}</p>
+                <p className="mt-1">{t("key.verifyBody", { email: session.user.email })}</p>
                 {verificationSent && (
-                  <p role="status" className="mt-2">Verification email requested. Check your inbox; the link expires in 1 hour.</p>
+                  <p role="status" className="mt-2">{t("key.verifySent")}</p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button variant="outline" onClick={handleSendVerification} disabled={isSendingVerification}>
-                    {isSendingVerification ? "Sending…" : verificationSent ? "Resend verification email" : "Send verification email"}
+                    {isSendingVerification ? t("key.sending") : verificationSent ? t("key.resend") : t("key.send")}
                   </Button>
                   <Button variant="ghost" onClick={() => void refetch()}>
-                    I have verified my email
+                    {t("key.verified")}
                   </Button>
                 </div>
               </AlertDescription>
@@ -235,7 +238,7 @@ export default function ApiKeysPage() {
             <Alert className="mb-6 border-green-200 bg-green-50">
               <AlertDescription>
                 <p className="font-medium text-green-900 mb-2">
-                  Copy your new key now — it won&apos;t be shown again.
+                  {t("key.copyNow")}
                 </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 px-3 py-2 bg-white border rounded text-sm break-all">
@@ -252,12 +255,12 @@ export default function ApiKeysPage() {
           {/* Create form */}
           <div className="mb-10 p-4 border rounded-lg">
             <Label htmlFor="key-name" className="mb-2 block">
-              Create a new key
+              {t("key.createNew")}
             </Label>
             <div className="flex gap-2">
               <Input
                 id="key-name"
-                placeholder="e.g. My laptop MCP"
+                placeholder={t("key.namePlaceholder")}
                 value={name}
                 maxLength={120}
                 onChange={(e) => setName(e.target.value)}
@@ -265,7 +268,7 @@ export default function ApiKeysPage() {
               />
               <Button onClick={handleCreate} disabled={isCreating || !emailVerified}>
                 <Plus className="w-4 h-4" />
-                {isCreating ? "Creating…" : "Create"}
+                {isCreating ? t("key.creating") : t("key.create")}
               </Button>
             </div>
           </div>
@@ -273,12 +276,12 @@ export default function ApiKeysPage() {
           {/* Key list */}
           <div>
             <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
-              Your keys
+              {t("key.yourKeys")}
             </h2>
             {isFetching ? (
               <Skeleton className="h-20 w-full" />
             ) : keys.length === 0 ? (
-              <p className="text-gray-500 text-sm">No API keys yet.</p>
+              <p className="text-gray-500 text-sm">{t("key.none")}</p>
             ) : (
               <div className="space-y-3">
                 {keys.map((key) => (
@@ -289,14 +292,13 @@ export default function ApiKeysPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-black truncate">{key.name}</span>
-                        {key.revoked && <Badge variant="secondary">Revoked</Badge>}
+                        {key.revoked && <Badge variant="secondary">{t("key.revoked")}</Badge>}
                       </div>
                       <p className="text-xs text-gray-500 font-mono mt-1">
                         {key.key_prefix}…
                       </p>
                       <p className="text-xs text-gray-400 mt-1">
-                        Created {formatDate(key.created_at)} · Last used{" "}
-                        {formatDate(key.last_used_at)}
+                        {t("key.created", { created: formatDate(key.created_at, locale), used: formatDate(key.last_used_at, locale) })}
                       </p>
                     </div>
                     {!key.revoked && (
@@ -307,7 +309,7 @@ export default function ApiKeysPage() {
                         onClick={() => handleRevoke(key.id)}
                       >
                         <Trash2 className="w-4 h-4" />
-                        Revoke
+                        {t("key.revoke")}
                       </Button>
                     )}
                   </div>

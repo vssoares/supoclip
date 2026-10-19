@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { EditorWorkspace } from "@/components/editor/editor-workspace";
 import { editorRequest } from "@/components/editor/use-editor";
 import type { ClipSummary } from "@/components/editor/export-panel";
+import { useT } from "@/lib/i18n";
 
 export default function TaskEditPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const requested = useSearchParams().get("clip");
   const [task, setTask] = useState<{
@@ -62,14 +64,14 @@ export default function TaskEditPage() {
       <div className="max-w-lg mx-auto px-4 py-24 text-center space-y-4">
         <h1 className="text-xl font-semibold">
           {task?.status !== "completed"
-            ? "Your clips are still processing"
-            : "No clips to edit yet"}
+            ? t("ed.page.processing")
+            : t("ed.page.none")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          The editor is ready once your generation completes.
+          {t("ed.page.ready")}
         </p>
         <Button asChild>
-          <Link href={`/tasks/${id}`}>Back to generation</Link>
+          <Link href={`/tasks/${id}`}>{t("ed.page.back")}</Link>
         </Button>
       </div>
     );
@@ -77,7 +79,7 @@ export default function TaskEditPage() {
     <EditorWorkspace
       key={`${id}:${clip.id}`}
       taskId={id}
-      title={task?.source_title || "Untitled generation"}
+      title={task?.source_title || t("ed.page.untitled")}
       clips={clips}
       clip={clip}
       onSelect={(clipId) => {

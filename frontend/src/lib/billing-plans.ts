@@ -1,3 +1,5 @@
+import { makeTranslator, type Translate } from "@/lib/i18n/translate";
+
 export type BillingPlanId = "pro" | "scale";
 
 export type PublicBillingPlan = {
@@ -14,7 +16,7 @@ export type PublicBillingPlan = {
 
 export const PAID_PLAN_IDS: BillingPlanId[] = ["pro", "scale"];
 
-export function formatBillingPlanName(plan: string | null | undefined): string {
+export function formatBillingPlanName(plan: string | null | undefined, t: Translate = makeTranslator("en")): string {
   if (plan === "pro") {
     return "Pro";
   }
@@ -22,16 +24,16 @@ export function formatBillingPlanName(plan: string | null | undefined): string {
     return "Scale";
   }
   if (plan === "self_host") {
-    return "Self-Hosted";
+    return t("plan.selfHosted");
   }
-  return "Free";
+  return t("plan.free");
 }
 
 export function isPaidBillingPlan(plan: string | null | undefined): plan is BillingPlanId {
   return plan === "pro" || plan === "scale";
 }
 
-export function getPublicBillingPlans(): PublicBillingPlan[] {
+export function getPublicBillingPlans(t: Translate = makeTranslator("en")): PublicBillingPlan[] {
   const proPriceMonthly = process.env.NEXT_PUBLIC_PRO_PRICE_MONTHLY || "10";
   const scalePriceMonthly = process.env.NEXT_PUBLIC_SCALE_PRICE_MONTHLY || "50";
   const proLimit = parseInt(process.env.NEXT_PUBLIC_PRO_PLAN_TASK_LIMIT || "50", 10);
@@ -47,13 +49,13 @@ export function getPublicBillingPlans(): PublicBillingPlan[] {
       priceMonthly: proPriceMonthly,
       generationLimit: proLimit,
       youtubeMaxMinutes: proYoutubeMinutes,
-      description: "For creators who clip consistently each month.",
+      description: t("plan.pro.description"),
       highlights: [
-        `${proLimit} videos clipped every month`,
-        `YouTube videos up to ${formatMinutes(proYoutubeMinutes)}`,
-        "Custom fonts, B-roll and caption templates",
+        t("plan.highlight.videos", { limit: proLimit }),
+        t("plan.highlight.youtube", { duration: formatMinutes(proYoutubeMinutes, t) }),
+        t("plan.highlight.pro"),
       ],
-      cta: "Upgrade to Pro",
+      cta: t("plan.pro.cta"),
       highlighted: true,
     },
     {
@@ -62,29 +64,29 @@ export function getPublicBillingPlans(): PublicBillingPlan[] {
       priceMonthly: scalePriceMonthly,
       generationLimit: scaleLimit,
       youtubeMaxMinutes: scaleYoutubeMinutes,
-      description: "For teams and high-volume publishing workflows.",
+      description: t("plan.scale.description"),
       highlights: [
-        `${scaleLimit} videos clipped every month`,
-        `YouTube videos up to ${formatMinutes(scaleYoutubeMinutes)}`,
-        "Priority processing",
+        t("plan.highlight.videos", { limit: scaleLimit }),
+        t("plan.highlight.youtube", { duration: formatMinutes(scaleYoutubeMinutes, t) }),
+        t("plan.highlight.scale"),
       ],
-      cta: "Upgrade to Scale",
+      cta: t("plan.scale.cta"),
       highlighted: false,
     },
   ];
 }
 
-export function formatMinutes(minutes: number): string {
+export function formatMinutes(minutes: number, t: Translate = makeTranslator("en")): string {
   if (minutes >= 60 && minutes % 60 === 0) {
     const hours = minutes / 60;
-    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+    return t(hours === 1 ? "plan.hourOne" : "plan.hourMany", { n: hours });
   }
-  return `${minutes} minutes`;
+  return t("plan.minutes", { n: minutes });
 }
 
 /** The plan one step above `plan`, or null when there is nothing to upgrade to. */
-export function getNextBillingPlan(plan: string | null | undefined): PublicBillingPlan | null {
-  const plans = getPublicBillingPlans();
+export function getNextBillingPlan(plan: string | null | undefined, t: Translate = makeTranslator("en")): PublicBillingPlan | null {
+  const plans = getPublicBillingPlans(t);
   if (plan === "scale" || plan === "self_host") return null;
   if (plan === "pro") return plans.find((candidate) => candidate.id === "scale") ?? null;
   return plans.find((candidate) => candidate.id === "pro") ?? null;

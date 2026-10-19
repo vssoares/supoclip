@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, TriangleAlert } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/datafast";
+import { useT } from "@/lib/i18n";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ interface DeleteAccountSectionProps {
 }
 
 export function DeleteAccountSection({ email, hasAppStoreSubscription = false }: DeleteAccountSectionProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
@@ -56,12 +58,12 @@ export function DeleteAccountSection({ email, hasAppStoreSubscription = false }:
     try {
       const response = await authClient.deleteUser({ password });
       if (response.error) {
-        setError(response.error.message || "Failed to delete account");
+        setError(response.error.message || t("del.failed"));
         setIsDeleting(false);
         return;
       }
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete account");
+      setError(deleteError instanceof Error ? deleteError.message : t("del.failed"));
       setIsDeleting(false);
       return;
     }
@@ -80,28 +82,27 @@ export function DeleteAccountSection({ email, hasAppStoreSubscription = false }:
           <TriangleAlert className="size-4" />
         </span>
         <div>
-          <h2 className="text-sm font-semibold">Danger zone</h2>
-          <p className="text-xs text-muted-foreground">Irreversible actions for your account.</p>
+          <h2 className="text-sm font-semibold">{t("del.zone")}</h2>
+          <p className="text-xs text-muted-foreground">{t("del.zoneDesc")}</p>
         </div>
       </div>
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium">Delete account</p>
+          <p className="text-sm font-medium">{t("del.title")}</p>
           <p className="text-xs text-muted-foreground">
-            Permanently delete your account, generations, clips and API keys.
+            {t("del.desc")}
           </p>
         </div>
         <Dialog open={open} onOpenChange={handleOpenChange}>
           <DialogTrigger asChild>
-            <Button type="button" variant="destructive">Delete account</Button>
+            <Button type="button" variant="destructive">{t("del.title")}</Button>
           </DialogTrigger>
           <DialogContent>
             <form onSubmit={handleDelete} className="space-y-4">
               <DialogHeader>
-                <DialogTitle>Delete your account?</DialogTitle>
+                <DialogTitle>{t("del.dialogTitle")}</DialogTitle>
                 <DialogDescription>
-                  This permanently deletes your account, all generations and clips, and revokes your API keys. This
-                  can&apos;t be undone.
+                  {t("del.dialogDesc")}
                 </DialogDescription>
               </DialogHeader>
 
@@ -109,15 +110,14 @@ export function DeleteAccountSection({ email, hasAppStoreSubscription = false }:
                 <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
-                    Your subscription is managed through the App Store. Deleting your account doesn&apos;t cancel
-                    it, so cancel it in your App Store subscriptions to stop being charged.
+                    {t("del.appStore")}
                   </AlertDescription>
                 </Alert>
               )}
 
               <div className="space-y-2">
                 <Label htmlFor="delete-account-confirmation" className="text-sm font-normal">
-                  Type <span className="font-semibold">{email}</span> to confirm
+                  {t("del.typePre")} <span className="font-semibold">{email}</span> {t("del.typePost")}
                 </Label>
                 <Input
                   id="delete-account-confirmation"
@@ -129,7 +129,7 @@ export function DeleteAccountSection({ email, hasAppStoreSubscription = false }:
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="delete-account-password" className="text-sm font-normal">Password</Label>
+                <Label htmlFor="delete-account-password" className="text-sm font-normal">{t("del.password")}</Label>
                 <Input
                   id="delete-account-password"
                   type="password"
@@ -149,10 +149,10 @@ export function DeleteAccountSection({ email, hasAppStoreSubscription = false }:
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isDeleting}>
-                  Cancel
+                  {t("del.cancel")}
                 </Button>
                 <Button type="submit" variant="destructive" disabled={!confirmed || !password || isDeleting}>
-                  {isDeleting ? <><Loader2 className="size-4 animate-spin" />Deleting...</> : "Delete account"}
+                  {isDeleting ? <><Loader2 className="size-4 animate-spin" />{t("del.deleting")}</> : t("del.title")}
                 </Button>
               </DialogFooter>
             </form>

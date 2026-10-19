@@ -1,3 +1,6 @@
+import type { MessageKey } from "@/lib/i18n/en";
+import type { Translate } from "@/lib/i18n/translate";
+
 export type SocialProviderId = "youtube" | "tiktok" | "instagram";
 
 export type SocialPrivacyLevel = "public" | "unlisted" | "private";
@@ -119,19 +122,19 @@ export const PROVIDER_LABELS: Record<SocialProviderId, string> = {
   instagram: "Instagram Reels",
 };
 
-export const PRIVACY_LABELS: Record<SocialPrivacyLevel, string> = {
-  public: "Public",
-  unlisted: "Unlisted",
-  private: "Private (only me)",
+export const PRIVACY_LABEL_KEYS: Record<SocialPrivacyLevel, MessageKey> = {
+  public: "soc.privacy.public",
+  unlisted: "soc.privacy.unlisted",
+  private: "soc.privacy.private",
 };
 
-export const POST_STATUS_LABELS: Record<SocialPostStatus, string> = {
-  scheduled: "Scheduled",
-  queued: "Queued",
-  publishing: "Publishing",
-  published: "Published",
-  failed: "Failed",
-  cancelled: "Cancelled",
+export const POST_STATUS_LABEL_KEYS: Record<SocialPostStatus, MessageKey> = {
+  scheduled: "soc.status.scheduled",
+  queued: "soc.status.queued",
+  publishing: "soc.status.publishing",
+  published: "soc.status.published",
+  failed: "soc.status.failed",
+  cancelled: "soc.status.cancelled",
 };
 
 export const ACTIVE_POST_STATUSES: SocialPostStatus[] = ["queued", "publishing"];
@@ -155,11 +158,11 @@ export function formatPercent(value: number | null | undefined): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-export function formatDateTime(value: string | null | undefined): string {
+export function formatDateTime(value: string | null | undefined, locale?: string): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString();
+  return date.toLocaleString(locale);
 }
 
 export function parseHashtagInput(value: string): string[] {
@@ -169,16 +172,16 @@ export function parseHashtagInput(value: string): string[] {
     .filter(Boolean);
 }
 
-export function durationBucketLabel(bucket: string): string {
+export function durationBucketLabel(bucket: string, t: Translate): string {
   switch (bucket) {
     case "under_20s":
-      return "Under 20s";
+      return t("soc.bucket.under_20s");
     case "20_to_35s":
-      return "20–35s";
+      return t("soc.bucket.20_to_35s");
     case "35_to_50s":
-      return "35–50s";
+      return t("soc.bucket.35_to_50s");
     case "over_50s":
-      return "Over 50s";
+      return t("soc.bucket.over_50s");
     default:
       return bucket;
   }

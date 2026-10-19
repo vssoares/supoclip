@@ -6,16 +6,17 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  CREATOR_OFFER_TEXT,
   captureCreatorCodeFromUrl,
   clearCreatorCode,
   lookupCreatorCode,
   storeCreatorCode,
 } from "@/lib/creator-code";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /** "Have a creator code?" for new subscribers; the code is applied by startUpgrade. */
 export function CreatorCodeField({ className }: { className?: string }) {
+  const t = useT();
   const [applied, setApplied] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [value, setValue] = useState("");
@@ -33,7 +34,7 @@ export function CreatorCodeField({ className }: { className?: string }) {
     const code = await lookupCreatorCode(value);
     setIsChecking(false);
     if (!code) {
-      setError("That code isn't valid.");
+      setError(t("cc.invalid"));
       return;
     }
     storeCreatorCode(code);
@@ -45,7 +46,7 @@ export function CreatorCodeField({ className }: { className?: string }) {
   if (applied) {
     return (
       <p className={cn("text-xs text-muted-foreground", className)}>
-        Creator code <span className="font-mono font-medium text-foreground">{applied}</span>: {CREATOR_OFFER_TEXT}.{" "}
+        {t("cc.code")} <span className="font-mono font-medium text-foreground">{applied}</span>: {t("cc.offer")}.{" "}
         <button
           type="button"
           className="underline underline-offset-2 hover:text-foreground"
@@ -54,7 +55,7 @@ export function CreatorCodeField({ className }: { className?: string }) {
             setApplied(null);
           }}
         >
-          Remove
+          {t("cc.remove")}
         </button>
       </p>
     );
@@ -67,7 +68,7 @@ export function CreatorCodeField({ className }: { className?: string }) {
         onClick={() => setIsOpen(true)}
         className={cn("text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline", className)}
       >
-        Have a creator code?
+        {t("cc.have")}
       </button>
     );
   }
@@ -78,14 +79,14 @@ export function CreatorCodeField({ className }: { className?: string }) {
         <Input
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="Creator code"
-          aria-label="Creator code"
+          placeholder={t("cc.placeholder")}
+          aria-label={t("cc.placeholder")}
           maxLength={20}
           autoFocus
           className="h-8 font-mono text-sm uppercase"
         />
         <Button type="submit" size="sm" variant="outline" disabled={!value.trim() || isChecking}>
-          {isChecking ? <Loader2 className="size-3.5 animate-spin" /> : "Apply"}
+          {isChecking ? <Loader2 className="size-3.5 animate-spin" /> : t("cc.apply")}
         </Button>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
