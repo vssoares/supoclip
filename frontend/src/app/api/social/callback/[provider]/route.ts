@@ -59,15 +59,13 @@ export async function GET(
   }
 
   const session = await getServerSession();
-  if (!session?.user?.id) {
-    return settingsRedirect({
-      error: "Your session expired during the connection. Sign in and try again.",
-    });
-  }
 
+  // When the OAuth callback arrives via a different domain (e.g. an ngrok
+  // tunnel) the browser can't send the localhost session cookie, so session
+  // is null here. The backend derives the user_id from the stored state row.
   const upstream = await fetchBackend(`/social/connections/${provider}/callback`, {
     method: "POST",
-    userId: session.user.id,
+    userId: session?.user?.id,
     extraHeaders: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, state }),
     cache: "no-store",
