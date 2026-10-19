@@ -43,6 +43,7 @@ from ..ai import get_most_relevant_parts_by_transcript
 from ..config import get_config
 from ..media_storage import MediaStorage
 from ..outro import append_outro
+from ..watermark import DEFAULT_WATERMARK_POSITION, apply_watermark
 
 logger = logging.getLogger(__name__)
 UPLOAD_URL_PREFIX = "upload://"
@@ -271,6 +272,8 @@ class VideoService:
         add_subtitles: bool = True,
         cleanup_settings: Optional[Dict[str, Any]] = None,
         outro_path: Optional[Path] = None,
+        watermark_path: Optional[Path] = None,
+        watermark_position: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Render a single clip in the thread pool and return clip_info dict, or None on failure.
 
@@ -349,6 +352,14 @@ class VideoService:
 
             save_clip_source_ranges(clip_path, keep_ranges)
             cleaned_duration = sum(end - start for start, end in keep_ranges)
+            # The watermark goes on first so the outro stays clean.
+            if watermark_path is not None:
+                await run_in_thread(
+                    apply_watermark,
+                    clip_path,
+                    watermark_path,
+                    watermark_position or DEFAULT_WATERMARK_POSITION,
+                )
             if outro_path is not None:
                 await run_in_thread(append_outro, clip_path, outro_path)
             logger.info(

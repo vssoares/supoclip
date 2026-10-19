@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  AlertCircle, ArrowRight, ArrowUp, Captions, CaptionsOff, Check, ChevronDown, Clapperboard, Crop, FileVideo,
+  AlertCircle, ArrowRight, Stamp, ArrowUp, Captions, CaptionsOff, Check, ChevronDown, Clapperboard, Crop, FileVideo,
   Loader2, Paintbrush, Paperclip, Trash2, Upload, Wand2, X, Youtube,
 } from "lucide-react";
 import { CaptionSizeControl } from "@/components/caption-size-control";
@@ -42,6 +42,15 @@ interface CaptionTemplate {
   font_size?: number;
   font_color?: string;
 }
+
+type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+const WATERMARK_POSITIONS: { id: WatermarkPosition; className: string }[] = [
+  { id: "top-left", className: "left-1.5 top-1.5" },
+  { id: "top-right", className: "right-1.5 top-1.5" },
+  { id: "bottom-left", className: "bottom-1.5 left-1.5" },
+  { id: "bottom-right", className: "bottom-1.5 right-1.5" },
+];
 
 interface OutroOption {
   filename: string;
@@ -92,6 +101,11 @@ export default function HomeApp() {
   const [outro, setOutro] = useState<string | null>(null);
   const [isUploadingOutro, setIsUploadingOutro] = useState(false);
   const outroUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [watermarks, setWatermarks] = useState<OutroOption[]>([]);
+  const [watermark, setWatermark] = useState<string | null>(null);
+  const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
+  const [isUploadingWatermark, setIsUploadingWatermark] = useState(false);
+  const watermarkUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [cutLongPauses, setCutLongPauses] = useState(true);
   const [pauseThresholdMs, setPauseThresholdMs] = useState("700");
   const [removeFillerWords, setRemoveFillerWords] = useState(true);
@@ -178,6 +192,63 @@ export default function HomeApp() {
       setError(t("home.err.outroUpload"));
     } finally {
       setIsUploadingOutro(false);
+    }
+  };
+
+  const refreshWatermarks = useCallback(async () => {
+    try {
+      const response = await fetch("/api/watermarks", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      setWatermarks(data.watermarks || []);
+    } catch (error) {
+      console.error("Failed to load watermarks:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session?.user?.id) void refreshWatermarks();
+  }, [session?.user?.id, refreshWatermarks]);
+
+  const handleWatermarkUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const imageFile = event.target.files?.[0];
+    event.target.value = "";
+    if (!imageFile) return;
+
+    if (!/\.(png|jpe?g|webp)$/i.test(imageFile.name)) {
+      setError(t("home.err.watermarkType"));
+      return;
+    }
+
+    try {
+      setIsUploadingWatermark(true);
+      setError(null);
+      const formData = new FormData();
+      formData.append("file", imageFile);
+      const response = await fetch("/api/watermarks/upload", { method: "POST", body: formData });
+      if (!response.ok) {
+        setError(formatSupportMessage(await parseApiError(response, t("home.err.watermarkUpload"))));
+        return;
+      }
+      const data = await response.json();
+      await refreshWatermarks();
+      if (data?.watermark?.filename) setWatermark(data.watermark.filename);
+    } catch (uploadError) {
+      console.error("Failed to upload watermark:", uploadError);
+      setError(t("home.err.watermarkUpload"));
+    } finally {
+      setIsUploadingWatermark(false);
+    }
+  };
+
+  const handleWatermarkDelete = async (filename: string) => {
+    try {
+      const response = await fetch(`/api/watermarks/${encodeURIComponent(filename)}`, { method: "DELETE" });
+      if (!response.ok) return;
+      if (watermark === filename) setWatermark(null);
+      await refreshWatermarks();
+    } catch (deleteError) {
+      console.error("Failed to delete watermark:", deleteError);
     }
   };
 
@@ -309,6 +380,7 @@ export default function HomeApp() {
           output_format: outputFormat,
           add_subtitles: addSubtitles,
           outro,
+          watermark: watermark ? { filename: watermark, position: watermarkPosition } : null,
           cut_long_pauses: cutLongPauses,
           pause_threshold_ms: normalizedPauseThreshold,
           remove_filler_words: removeFillerWords,
@@ -642,6 +714,94 @@ export default function HomeApp() {
                   <Button type="button" variant="outline" size="sm" className="w-full" disabled={isUploadingOutro} onClick={() => outroUploadInputRef.current?.click()}>
                     {isUploadingOutro ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
                     {isUploadingOutro ? t("home.outro.uploading") : t("home.outro.upload")}
+                  </Button>
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Chip disabled={controlsDisabled} active={watermark !== null}>
+                    <Stamp className="size-3.5" />
+                    <span className="max-w-32 truncate">
+                      {watermarks.find((item) => item.filename === watermark)?.display_name ?? t("home.watermark")}
+                    </span>
+                    <ChevronDown className="size-3 opacity-60" />
+                  </Chip>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[min(92vw,340px)] space-y-3 rounded-2xl">
+                  <div>
+                    <p className="text-sm font-medium">{t("home.watermark")}</p>
+                    <p className="text-xs text-muted-foreground">{t("home.watermark.subtitle")}</p>
+                  </div>
+                  <div className="flex flex-col gap-1" role="radiogroup" aria-label={t("home.watermark")}>
+                    {[{ filename: "", display_name: t("home.watermark.none"), size_bytes: 0 }, ...watermarks].map((item) => {
+                      const selected = (watermark ?? "") === item.filename;
+                      return (
+                        <div key={item.filename || "none"} className={cn("flex items-center gap-1 rounded-lg transition-colors hover:bg-accent", selected && "bg-accent")}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => setWatermark(item.filename || null)}
+                            className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-sm"
+                          >
+                            {item.filename ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={`/api/watermarks/${encodeURIComponent(item.filename)}/file`} alt="" className="size-6 shrink-0 rounded object-contain" />
+                            ) : null}
+                            <span className="min-w-0 flex-1 truncate">{item.display_name}</span>
+                            {selected && <Check className="size-4 shrink-0" />}
+                          </button>
+                          {item.filename && (
+                            <button
+                              type="button"
+                              onClick={() => void handleWatermarkDelete(item.filename)}
+                              aria-label={t("home.watermark.delete", { name: item.display_name })}
+                              className="mr-1 rounded-md p-1.5 text-muted-foreground hover:text-foreground"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {watermarks.length === 0 && <p className="text-xs text-muted-foreground">{t("home.watermark.empty")}</p>}
+                  {watermark && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("home.watermark.corner")}</p>
+                      <div className="relative mx-auto aspect-[9/16] w-24 rounded-xl bg-stone-800" role="radiogroup" aria-label={t("home.watermark.corner")}>
+                        {WATERMARK_POSITIONS.map((position) => {
+                          const selected = watermarkPosition === position.id;
+                          return (
+                            <button
+                              key={position.id}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              aria-label={t(`home.watermark.pos.${position.id}`)}
+                              title={t(`home.watermark.pos.${position.id}`)}
+                              onClick={() => setWatermarkPosition(position.id)}
+                              className={cn(
+                                "absolute flex size-7 items-center justify-center overflow-hidden rounded-md border border-dashed border-white/40 transition-colors hover:border-white",
+                                position.className,
+                                selected && "border-solid border-brand bg-white/10",
+                              )}
+                            >
+                              {selected && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={`/api/watermarks/${encodeURIComponent(watermark)}/file`} alt="" className="size-full object-contain" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <input ref={watermarkUploadInputRef} type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" onChange={handleWatermarkUpload} className="hidden" />
+                  <Button type="button" variant="outline" size="sm" className="w-full" disabled={isUploadingWatermark} onClick={() => watermarkUploadInputRef.current?.click()}>
+                    {isUploadingWatermark ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                    {isUploadingWatermark ? t("home.watermark.uploading") : t("home.watermark.upload")}
                   </Button>
                 </PopoverContent>
               </Popover>

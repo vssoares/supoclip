@@ -92,6 +92,8 @@ services:
       - uploads:/app/uploads
       - clips:/app/clips
       - ./backend/fonts:/app/fonts
+      - ./backend/outros:/app/outros
+      - ./backend/watermarks:/app/watermarks
       - ./backend/transitions:/app/transitions
     environment:
       - PYTHONPATH=/app
@@ -247,6 +249,8 @@ services:
       - uploads:/app/uploads
       - clips:/app/clips
       - ./backend/fonts:/app/fonts
+      - ./backend/outros:/app/outros
+      - ./backend/watermarks:/app/watermarks
       - ./backend/transitions:/app/transitions
     environment:
       - PYTHONPATH=/app

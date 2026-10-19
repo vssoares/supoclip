@@ -25,3 +25,7 @@ docs/youtube-provider-registry*.json
 
 # Local agent checkouts
 .claude/worktrees/
+backend/outros/*
+!backend/outros/.gitkeep
+backend/watermarks/*
+!backend/watermarks/.gitkeep
