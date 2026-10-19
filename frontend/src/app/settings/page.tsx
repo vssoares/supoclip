@@ -20,10 +20,11 @@ import { CreatorCodeField } from "@/components/billing/creator-code-field";
 import { toast } from "sonner";
 import { track } from "@/lib/datafast";
 import Link from "next/link";
-import { AlertCircle, Bot, Check, ChevronRight, CreditCard, Loader2, Mail, Megaphone, Share2, Type } from "lucide-react";
+import { AlertCircle, Bot, Check, ChevronRight, CreditCard, Loader2, Mail, Megaphone, Palette, Share2, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n";
 import { FontSelectOption, type FontOption } from "@/components/font-select-option";
+import { UiFontSelect } from "@/components/ui-font-select";
 
 interface UserPreferences {
   fontFamily: string;
@@ -378,6 +379,10 @@ export default function SettingsPage() {
             </Label>
             <Switch id="completion-emails" checked={completionEmails} onCheckedChange={setCompletionEmails} disabled={isLoading} />
           </div>
+        </Section>
+
+        <Section id="appearance" icon={<Palette className="size-4" />} title={t("set.appearance.title")} description={t("set.appearance.desc")}>
+          <UiFontSelect />
         </Section>
 
         {billingSummary?.monetization_enabled && (

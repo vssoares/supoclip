@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Syne } from "next/font/google";
+import { Geist, Geist_Mono, Manrope, Syne } from "next/font/google";
+import { cookies } from "next/headers";
 import Script from "next/script";
 import "./globals.css";
 import { AttributionTracker } from "@/components/attribution-tracker";
@@ -11,9 +12,15 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
 import { APP_STORE_ID, getSiteUrl } from "@/lib/site";
+import { DEFAULT_UI_FONT, UI_FONT_COOKIE, isUiFont } from "@/lib/ui-font";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
 });
 
@@ -84,6 +91,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const locale = await getLocale();
+  const storedFont = (await cookies()).get(UI_FONT_COOKIE)?.value;
+  const uiFont = isUiFont(storedFont) ? storedFont : DEFAULT_UI_FONT;
   return (
     <html lang={locale === "pt" ? "pt-BR" : "en"} suppressHydrationWarning>
       <head>
@@ -107,7 +116,7 @@ export default async function RootLayout({
           </>
         ) : null}
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${syne.variable} antialiased`}>
+      <body data-ui-font={uiFont} className={`${geistSans.variable} ${manrope.variable} ${geistMono.variable} ${syne.variable} antialiased`}>
         <I18nProvider locale={locale}>
         <ThemeProvider>
           <TooltipProvider>
