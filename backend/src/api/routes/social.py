@@ -117,7 +117,13 @@ async def complete_connection(
     provider: str, request: Request, db: AsyncSession = Depends(get_db)
 ):
     """Finish the OAuth handshake with the ``code`` and ``state`` the platform returned."""
-    user_id = await _allowed_user_id(request, db, session_only=True)
+    # Prefer the signed session headers, but allow None so cross-domain OAuth
+    # callbacks (e.g. via an ngrok tunnel) can still complete — the service
+    # derives the user_id from the stored state row in that case.
+    try:
+        user_id: Optional[str] = await _allowed_user_id(request, db, session_only=True)
+    except HTTPException:
+        user_id = None
     body = await _json_body(request)
     try:
         connection = await _service(request, db).complete_connection(

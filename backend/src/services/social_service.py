@@ -180,12 +180,16 @@ class SocialService:
         return {"provider": provider.name, "authorize_url": authorize_url, "state": state}
 
     async def complete_connection(
-        self, user_id: str, provider_name: str, *, code: str, state: str
+        self, user_id: Optional[str], provider_name: str, *, code: str, state: str
     ) -> Dict[str, Any]:
         provider = self._provider(provider_name)
         if not code or not state:
             raise SocialValidationError("Missing OAuth code or state")
         state_row = await self.repo.consume_oauth_state(self.db, state)
+        # When user_id is None (e.g. cross-domain OAuth callback with no session
+        # cookie), derive it from the stored state so the flow still completes.
+        if state_row and user_id is None:
+            user_id = state_row["user_id"]
         if (
             not state_row
             or state_row["user_id"] != user_id
