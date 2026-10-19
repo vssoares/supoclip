@@ -1,3 +1,5 @@
+import type { Translate } from "@/lib/i18n";
+
 export interface GenerationSummary {
   id: string;
   user_id: string;
@@ -30,18 +32,18 @@ export function formatClipDuration(seconds: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 31_536_000], ["month", 2_592_000], ["week", 604_800],
   ["day", 86_400], ["hour", 3_600], ["minute", 60],
 ];
 
-export function timeAgo(value: string) {
+export function timeAgo(value: string, locale = "en", justNow = "just now") {
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   const seconds = (new Date(value).getTime() - Date.now()) / 1000;
   for (const [unit, size] of UNITS) {
     if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
   }
-  return "just now";
+  return justNow;
 }
 
 /** Tailwind classes for a 0–100 virality score. */
@@ -51,9 +53,9 @@ export function scoreTone(score: number) {
   return "text-muted-foreground";
 }
 
-export function greeting(name?: string | null) {
+export function greeting(t: Translate, name?: string | null) {
   const hour = new Date().getHours();
-  const part = hour < 5 ? "Up late" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const part = t(hour < 5 ? "greeting.late" : hour < 12 ? "greeting.morning" : hour < 18 ? "greeting.afternoon" : "greeting.evening");
   const first = name?.trim().split(/\s+/)[0];
   return first ? `${part}, ${first}` : part;
 }

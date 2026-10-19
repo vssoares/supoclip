@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@/lib/datafast";
+import { useLocale, useT } from "@/lib/i18n";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,12 +29,14 @@ export function SubscriptionCancelBanner({
   onRestarted,
   className,
 }: SubscriptionCancelBannerProps) {
+  const t = useT();
+  const locale = useLocale();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
 
-  const cancelDate = new Date(cancelAt).toLocaleDateString(undefined, {
+  const cancelDate = new Date(cancelAt).toLocaleDateString(locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -45,13 +48,13 @@ export function SubscriptionCancelBanner({
       const res = await fetch("/api/billing/resume", { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Unable to restart subscription");
+        throw new Error(data?.error || t("cancel.restartFailed"));
       }
-      toast.success("Your subscription will renew as normal.");
+      toast.success(t("cancel.restarted"));
       track("subscription_restarted", {});
       onRestarted?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : t("cancel.wrong"));
     } finally {
       setIsRestarting(false);
     }
@@ -68,14 +71,14 @@ export function SubscriptionCancelBanner({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.detail || "Failed to send feedback");
+        throw new Error(data?.detail || t("cancel.feedbackFailed"));
       }
-      toast.success("Thanks for letting us know.");
+      toast.success(t("cancel.thanks"));
       track("feedback_submitted", { category: "cancellation" });
       setReason("");
       setFeedbackOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : t("cancel.wrong"));
     } finally {
       setIsSubmitting(false);
     }
@@ -87,7 +90,7 @@ export function SubscriptionCancelBanner({
         <AlertCircle className="h-4 w-4 text-amber-600" />
         <AlertDescription className="text-sm text-amber-900">
           <span>
-            Your subscription is scheduled to cancel on{" "}
+            {t("cancel.scheduled")}{" "}
             <span className="font-medium">{cancelDate}</span>.
           </span>
           <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
@@ -96,7 +99,7 @@ export function SubscriptionCancelBanner({
               onClick={() => setFeedbackOpen(true)}
               className="font-semibold underline underline-offset-2"
             >
-              Let us know why
+              {t("cancel.why")}
             </button>
             <button
               type="button"
@@ -105,7 +108,7 @@ export function SubscriptionCancelBanner({
               className="inline-flex items-center gap-1 font-semibold underline underline-offset-2 disabled:opacity-60"
             >
               {isRestarting && <Loader2 className="h-3 w-3 animate-spin" />}
-              Restart subscription
+              {t("cancel.restart")}
             </button>
           </span>
         </AlertDescription>
@@ -114,13 +117,13 @@ export function SubscriptionCancelBanner({
       <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Why are you cancelling?</DialogTitle>
+            <DialogTitle>{t("cancel.dialogTitle")}</DialogTitle>
             <DialogDescription>
-              Your answer goes straight to the team and helps us fix what isn&apos;t working.
+              {t("cancel.dialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="What made you decide to cancel?"
+            placeholder={t("cancel.placeholder")}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={4}
@@ -131,7 +134,7 @@ export function SubscriptionCancelBanner({
               onClick={handleSubmitReason}
               disabled={!reason.trim() || isSubmitting}
             >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : t("shared.send")}
             </Button>
           </DialogFooter>
         </DialogContent>

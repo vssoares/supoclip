@@ -4,6 +4,9 @@ import Script from "next/script";
 import "./globals.css";
 import { AttributionTracker } from "@/components/attribution-tracker";
 import { DataFastIdentity } from "@/components/datafast-identity";
+import { I18nProvider } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n/server";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
@@ -75,13 +78,14 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
   return (
-    <html lang="en">
+    <html lang={locale === "pt" ? "pt-BR" : "en"} suppressHydrationWarning>
       <head>
         {isDataFastEnabled ? (
           <>
@@ -104,13 +108,17 @@ export default function RootLayout({
         ) : null}
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} ${syne.variable} antialiased`}>
-        <TooltipProvider>
-          {children}
-          <DataFastIdentity />
-          <AttributionTracker />
-          <FeedbackButton />
-          <Toaster />
-        </TooltipProvider>
+        <I18nProvider locale={locale}>
+        <ThemeProvider>
+          <TooltipProvider>
+            {children}
+            <DataFastIdentity />
+            <AttributionTracker />
+            <FeedbackButton />
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+        </I18nProvider>
       </body>
     </html>
   );

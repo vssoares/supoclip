@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useT } from "@/lib/i18n";
 
 export function SignIn() {
   const [email, setEmail] = useState("");
@@ -15,11 +16,14 @@ export function SignIn() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const router = useRouter();
+  const t = useT();
+  const [succeeded, setSucceeded] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setSucceeded(false);
 
     const response = await signIn.email({
       email,
@@ -27,7 +31,7 @@ export function SignIn() {
     });
 
     if (response.error) {
-      setMessage(response.error.message || "Failed to sign in");
+      setMessage(response.error.message || t("auth.signIn.failed"));
       setLoading(false);
       return;
     }
@@ -35,7 +39,8 @@ export function SignIn() {
     track("signin_completed", {
       auth_method: "email",
     });
-    setMessage("Signed in successfully!");
+    setSucceeded(true);
+    setMessage(t("auth.signIn.success"));
     setLoading(false);
 
     // Redirect after successful sign in
@@ -47,14 +52,14 @@ export function SignIn() {
 
   return (
     <div className="w-full">
-      <h1 className="font-display text-3xl font-bold tracking-tight">Welcome back</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Sign in to pick up where you left off.</p>
+      <h1 className="font-display text-3xl font-bold tracking-tight">{t("auth.signIn.title")}</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{t("auth.signIn.subtitle")}</p>
       <div className="mt-8">
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             className="h-11"
             type="email"
-            placeholder="Email"
+            placeholder={t("auth.email")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -63,7 +68,7 @@ export function SignIn() {
           <Input
             className="h-11"
             type="password"
-            placeholder="Password"
+            placeholder={t("auth.password")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -71,15 +76,15 @@ export function SignIn() {
           />
           <div className="flex justify-end">
             <Link href="/forgot-password" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
-              Forgot password?
+              {t("auth.forgotPassword")}
             </Link>
           </div>
           <Button type="submit" className="h-11 w-full" disabled={loading}>
-            {loading ? "Signing In..." : "Sign In"}
+            {loading ? t("auth.signIn.loading") : t("auth.signIn.button")}
           </Button>
         </form>
         {message && (
-          <p className={`mt-4 text-sm ${message.includes("successfully") ? "text-green-600" : "text-red-600"}`}>
+          <p className={`mt-4 text-sm ${succeeded ? "text-green-600" : "text-red-600"}`}>
             {message}
           </p>
         )}

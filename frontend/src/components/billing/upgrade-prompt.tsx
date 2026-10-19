@@ -21,6 +21,8 @@ import {
 } from "@/lib/billing-plans";
 import { track } from "@/lib/datafast";
 import { startUpgrade } from "@/lib/start-upgrade";
+import { useLocale, useT } from "@/lib/i18n";
+import { makeTranslator, type Translate } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
 
 export type UpgradeReason =
@@ -60,10 +62,10 @@ export function upgradeReasonForError(
 }
 
 /** Everything the prompts need to decide what (if anything) to offer. */
-export function getUpgradeState(billing: UpgradeBilling | null | undefined) {
+export function getUpgradeState(billing: UpgradeBilling | null | undefined, t: Translate = makeTranslator("en"), locale?: string) {
   if (!billing) return null;
   const isPaid = isPaidBillingPlan(billing.plan) && ["active", "trialing"].includes(billing.subscription_status);
-  const nextPlan = getNextBillingPlan(isPaid ? billing.plan : "free");
+  const nextPlan = getNextBillingPlan(isPaid ? billing.plan : "free", t);
   // App Store subscriptions can only change plans inside the iOS app.
   const managedByAppStore = isPaid && billing.subscription_provider === "apple";
   const limit = billing.usage_limit;
@@ -80,59 +82,66 @@ export function getUpgradeState(billing: UpgradeBilling | null | undefined) {
     nearLimit,
     remaining,
     limit,
-    resetsOn: billing.period_end ? formatDate(billing.period_end) : null,
+    resetsOn: billing.period_end ? formatDate(billing.period_end, locale) : null,
   };
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, locale?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+  return date.toLocaleDateString(locale, { month: "long", day: "numeric" });
 }
 
-function formatRuntime(seconds: number) {
+function formatRuntime(seconds: number, t: Translate) {
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return t("upgrade.runtimeMin", { n: minutes });
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+  return rest ? t("upgrade.runtimeHourMin", { h: hours, m: rest }) : t("upgrade.runtimeHour", { h: hours });
 }
 
-function copyFor(reason: UpgradeReason, billing: UpgradeBilling | null | undefined, target: PublicBillingPlan | undefined) {
-  const planName = formatBillingPlanName(billing?.plan);
-  const state = getUpgradeState(billing);
+function copyFor(reason: UpgradeReason, billing: UpgradeBilling | null | undefined, target: PublicBillingPlan | undefined, t: Translate, locale: string) {
+  const planName = formatBillingPlanName(billing?.plan, t);
+  const state = getUpgradeState(billing, t, locale);
+  const refresh = state?.resetsOn ? t("upgrade.refreshesOn", { date: state.resetsOn }) : t("upgrade.refreshesNext");
   switch (reason.kind) {
     case "start":
       return {
-        eyebrow: "Ready when you are",
-        title: "Turn long videos into ready-to-post clips",
-        body: "Choose a hosted plan and we handle the processing, or self-host the open-source app on your own computer for free.",
+        eyebrow: t("upgrade.start.eyebrow"),
+        title: t("upgrade.start.title"),
+        body: t("upgrade.start.body"),
       };
     case "limit":
       return {
-        eyebrow: "What a month",
-        title: state?.limit ? `You've clipped all ${state.limit} videos on ${planName}` : `You've used everything on ${planName}`,
+        eyebrow: t("upgrade.limit.eyebrow"),
+        title: state?.limit ? t("upgrade.limit.titleLimit", { limit: state.limit, plan: planName }) : t("upgrade.limit.titleUsed", { plan: planName }),
         body: target
-          ? `Your allowance refreshes${state?.resetsOn ? ` on ${state.resetsOn}` : " next billing period"}. Keep the momentum going with ${target.name}: ${target.generationLimit} videos a month.`
-          : `Your allowance refreshes${state?.resetsOn ? ` on ${state.resetsOn}` : " next billing period"}.`,
+          ? t("upgrade.limit.keepGoing", { refresh, target: target.name, limit: target.generationLimit })
+          : refresh,
       };
     case "video_too_long":
       return {
-        eyebrow: "A long one",
-        title: `${target?.name ?? "A bigger plan"} can take this ${formatRuntime(reason.durationSeconds)} video`,
-        body: `${planName} covers YouTube videos up to ${formatMinutes(Math.round(reason.maxSeconds / 60))}. ${target ? `${target.name} handles up to ${formatMinutes(target.youtubeMaxMinutes)}, so this one goes straight through.` : ""} This try didn't use a generation.`,
+        eyebrow: t("upgrade.long.eyebrow"),
+        title: target
+          ? t("upgrade.long.titlePlan", { plan: target.name, runtime: formatRuntime(reason.durationSeconds, t) })
+          : t("upgrade.long.titleFallback", { runtime: formatRuntime(reason.durationSeconds, t) }),
+        body: t("upgrade.long.body", {
+          plan: planName,
+          max: formatMinutes(Math.round(reason.maxSeconds / 60), t),
+          extra: target ? t("upgrade.long.extra", { target: target.name, duration: formatMinutes(target.youtubeMaxMinutes, t) }) : "",
+        }),
       };
     case "custom_fonts":
       return {
-        eyebrow: "Make it yours",
-        title: "Captions in your brand's own font",
-        body: "Upload any .ttf or .otf and use it across every clip, so your shorts look like they come from you.",
+        eyebrow: t("upgrade.fonts.eyebrow"),
+        title: t("upgrade.fonts.title"),
+        body: t("upgrade.fonts.body"),
       };
     default:
       return {
-        eyebrow: "More room to create",
-        title: target ? `Do more with ${target.name}` : "Plans for every creator",
-        body: "More videos each month, longer sources and priority processing.",
+        eyebrow: t("upgrade.explore.eyebrow"),
+        title: target ? t("upgrade.explore.titlePlan", { plan: target.name }) : t("upgrade.explore.titleFallback"),
+        body: t("upgrade.explore.body"),
       };
   }
 }
@@ -147,8 +156,10 @@ interface UpgradeDialogProps {
 }
 
 export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: UpgradeDialogProps) {
-  const state = getUpgradeState(billing);
-  const allPlans = getPublicBillingPlans();
+  const t = useT();
+  const locale = useLocale();
+  const state = getUpgradeState(billing, t, locale);
+  const allPlans = getPublicBillingPlans(t);
   // Free users choose between every plan; subscribers see their plan next to the step up.
   const options: PublicBillingPlan[] = state?.isPaid ? (state.nextPlan ? [state.nextPlan] : []) : allPlans;
   const currentPlan = state?.isPaid ? allPlans.find((plan) => plan.id === billing?.plan) : undefined;
@@ -166,7 +177,7 @@ export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: U
   }, [open]);
 
   const target = options.find((plan) => plan.id === selected) ?? options[0];
-  const copy = copyFor(reason, billing, target);
+  const copy = copyFor(reason, billing, target, t, locale);
 
   const handleContinue = async () => {
     if (!target) return;
@@ -174,7 +185,7 @@ export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: U
     try {
       await startUpgrade(target.id, `${source}:${reason.kind}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "We couldn't open checkout. Please try again.");
+      toast.error(error instanceof Error ? error.message : t("upgrade.checkoutFailed"));
       setIsRedirecting(false);
     }
   };
@@ -184,7 +195,7 @@ export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: U
       <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] max-w-3xl gap-0 overflow-x-hidden overflow-y-auto p-0 sm:grid-cols-[1.1fr_1fr]">
         <DialogClose className="absolute right-4 top-4 z-10 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
           <X className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t("upgrade.close")}</span>
         </DialogClose>
         <div className="flex flex-col p-6 sm:p-8">
           <p className="text-xs font-medium text-muted-foreground">{copy.eyebrow}</p>
@@ -193,10 +204,10 @@ export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: U
 
           {state?.managedByAppStore ? (
             <p className="mt-6 rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-              Your subscription is managed through the App Store. You can change plans in the SupoClip iOS app.
+              {t("upgrade.appStore")}
             </p>
           ) : (
-            <div className="mt-6 space-y-2" role="radiogroup" aria-label="Plans">
+            <div className="mt-6 space-y-2" role="radiogroup" aria-label={t("upgrade.plans")}>
               {currentPlan && <PlanOption plan={currentPlan} current />}
               {options.map((plan) => (
                 <PlanOption
@@ -214,18 +225,17 @@ export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: U
             <div className="mt-3 rounded-lg border bg-muted/30 px-4 py-3">
               <div className="flex items-center gap-3">
                 <Server className="size-4 shrink-0 text-muted-foreground" />
-                <p className="flex-1 text-sm font-semibold">Self-hosted</p>
-                <span className="text-sm font-semibold">Free</span>
+                <p className="flex-1 text-sm font-semibold">{t("upgrade.selfHosted")}</p>
+                <span className="text-sm font-semibold">{t("upgrade.freeWord")}</span>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                Run SupoClip on your own computer with no subscription or monthly video limit.
-                Setup required; you provide the hardware and any paid AI services you choose.
+                {t("upgrade.selfHostedBody")}
               </p>
               <Link
                 href="/blog/self-host-supoclip-docker"
                 className="mt-3 inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4 hover:text-muted-foreground"
               >
-                Self-hosting guide <ArrowRight className="size-3.5" />
+                {t("upgrade.selfHostGuide")} <ArrowRight className="size-3.5" />
               </Link>
             </div>
           )}
@@ -236,19 +246,19 @@ export function UpgradeDialog({ open, onOpenChange, reason, billing, source }: U
             {target && !state?.managedByAppStore && (
               <Button size="lg" onClick={handleContinue} disabled={isRedirecting}>
                 {isRedirecting ? <Loader2 className="size-4 animate-spin" /> : null}
-                {isRedirecting ? "Opening secure checkout…" : `Continue with ${target.name}`}
+                {isRedirecting ? t("upgrade.opening") : t("upgrade.continueWith", { plan: target.name })}
                 {!isRedirecting && <ArrowRight className="size-4" />}
               </Button>
             )}
             <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-muted-foreground">
-              Maybe later
+              {t("upgrade.later")}
             </Button>
           </div>
           {target && !state?.managedByAppStore && (
             <p className="mt-3 text-center text-[11px] text-muted-foreground">
               {state?.isPaid
-                ? "You'll confirm the change on Stripe and only pay the prorated difference."
-                : "Cancel anytime · Secure checkout with Stripe"}
+                ? t("upgrade.prorated")
+                : t("upgrade.cancelAnytime")}
             </p>
           )}
         </div>
@@ -280,6 +290,7 @@ function PlanOption({
   recommended?: boolean;
   onSelect?: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -306,16 +317,16 @@ function PlanOption({
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2 text-sm font-semibold">
           {plan.name}
-          {current && <span className="text-xs font-normal text-muted-foreground">Current plan</span>}
-          {recommended && <span className="text-xs font-normal text-muted-foreground">Most popular</span>}
+          {current && <span className="text-xs font-normal text-muted-foreground">{t("upgrade.currentPlan")}</span>}
+          {recommended && <span className="text-xs font-normal text-muted-foreground">{t("upgrade.mostPopular")}</span>}
         </span>
         <span className="block text-xs text-muted-foreground">
-          {plan.generationLimit} videos/mo · up to {formatMinutes(plan.youtubeMaxMinutes)} each
+          {t("upgrade.planMeta", { limit: plan.generationLimit, duration: formatMinutes(plan.youtubeMaxMinutes, t) })}
         </span>
       </span>
       <span className="text-sm font-semibold tabular-nums">
         ${plan.priceMonthly}
-        <span className="text-xs font-normal text-muted-foreground">/mo</span>
+        <span className="text-xs font-normal text-muted-foreground">{t("upgrade.perMonth")}</span>
       </span>
     </button>
   );
@@ -331,6 +342,7 @@ function PlanShowcase({
   plan: PublicBillingPlan | undefined;
   currentPlan: PublicBillingPlan | undefined;
 }) {
+  const t = useT();
   return (
     <div className="hidden flex-col border-l bg-muted/50 p-8 sm:flex">
       <div className="flex flex-1 flex-col justify-center">
@@ -340,9 +352,9 @@ function PlanShowcase({
               durationSeconds={reason.durationSeconds}
               currentLimitSeconds={reason.maxSeconds}
               nextLimitSeconds={plan.youtubeMaxMinutes * 60}
-              durationLabel={formatRuntime(reason.durationSeconds)}
-              currentLabel={`${currentPlan?.name ?? "Today"} · ${formatMinutes(Math.round(reason.maxSeconds / 60))}`}
-              nextLabel={`${plan.name} · ${formatMinutes(plan.youtubeMaxMinutes)}`}
+              durationLabel={formatRuntime(reason.durationSeconds, t)}
+              currentLabel={`${currentPlan?.name ?? t("upgrade.today")} · ${formatMinutes(Math.round(reason.maxSeconds / 60), t)}`}
+              nextLabel={`${plan.name} · ${formatMinutes(plan.youtubeMaxMinutes, t)}`}
             />
           ) : reason.kind === "custom_fonts" ? (
             <FontIllustration />
@@ -351,7 +363,7 @@ function PlanShowcase({
               key={plan.id}
               from={currentPlan?.generationLimit ?? 0}
               to={plan.generationLimit}
-              label={currentPlan ? `videos a month, up from ${currentPlan.generationLimit}` : `videos a month with ${plan.name}`}
+              label={currentPlan ? t("upgrade.capacityFrom", { from: currentPlan.generationLimit }) : t("upgrade.capacityWith", { plan: plan.name })}
             />
           ))}
       </div>

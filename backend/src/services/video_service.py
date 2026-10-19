@@ -42,6 +42,7 @@ from ..clip_source_map import (
 from ..ai import get_most_relevant_parts_by_transcript
 from ..config import get_config
 from ..media_storage import MediaStorage
+from ..outro import append_outro
 
 logger = logging.getLogger(__name__)
 UPLOAD_URL_PREFIX = "upload://"
@@ -269,8 +270,12 @@ class VideoService:
         output_format: str = "vertical",
         add_subtitles: bool = True,
         cleanup_settings: Optional[Dict[str, Any]] = None,
+        outro_path: Optional[Path] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Render a single clip in the thread pool and return clip_info dict, or None on failure."""
+        """Render a single clip in the thread pool and return clip_info dict, or None on failure.
+
+        outro_path: optional video appended after the clip; a failed append keeps the plain clip.
+        """
         try:
             provided_keep_ranges = normalize_source_ranges(segment.get("keep_ranges"))
             source_ranges = normalize_source_ranges(segment.get("source_ranges"))
@@ -344,6 +349,8 @@ class VideoService:
 
             save_clip_source_ranges(clip_path, keep_ranges)
             cleaned_duration = sum(end - start for start, end in keep_ranges)
+            if outro_path is not None:
+                await run_in_thread(append_outro, clip_path, outro_path)
             logger.info(
                 f"Created clip {clip_index + 1}: {cleaned_duration:.1f}s"
             )

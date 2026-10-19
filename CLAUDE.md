@@ -103,6 +103,12 @@ utils/               → Thread pool helpers for blocking operations (async_help
 - All pages use `"use client"` — SSR is minimal
 - Prisma client generated to `frontend/src/generated/prisma/` (custom output path)
 - Build: `prisma generate && next build` (Prisma generate runs on both build and postinstall)
+- **i18n (Portuguese default, English):** strings live in `src/lib/i18n/areas/*.ts`, one file per area, each
+  `defineArea(en, pt)` so a missing Portuguese key is a type error; register new areas in `areas/index.ts`.
+  Components use `const t = useT()`; server code uses `makeTranslator(await getLocale())`. The locale is the
+  `supoclip-locale` cookie (set by `LanguageSwitcher`); `NEXT_PUBLIC_DEFAULT_LOCALE=en` flips the default (the
+  Playwright configs set it). Not translated yet: admin, legal pages, blog/guides, status page, page metadata,
+  backend-sent messages.
 
 **Auth flow:** Frontend calls Better Auth → session cookie → passes `user_id` header to backend API
 

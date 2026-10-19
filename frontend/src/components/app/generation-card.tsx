@@ -4,7 +4,8 @@ import Link from "next/link";
 import { AlertTriangle, Check, Loader2, Youtube, Upload } from "lucide-react";
 import { ClipCover, ScoreRing } from "@/components/app/clip-cover";
 import { StatusBadge, ACTIVE_TASK_STATUSES } from "@/components/app/status-badge";
-import { coverClipUrl, timeAgo, type GenerationSummary } from "@/lib/generations";
+import { coverClipUrl, type GenerationSummary } from "@/lib/generations";
+import { useT, useTimeAgo } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function GenerationCard({ generation, selected, onToggle, selectionDisabled, showStatus, className }: {
@@ -16,6 +17,8 @@ export function GenerationCard({ generation, selected, onToggle, selectionDisabl
   selectionDisabled?: boolean;
   className?: string;
 }) {
+  const t = useT();
+  const timeAgo = useTimeAgo();
   const active = ACTIVE_TASK_STATUSES.includes(generation.status);
   const failed = generation.status === "error";
   const selectable = Boolean(onToggle);
@@ -35,14 +38,14 @@ export function GenerationCard({ generation, selected, onToggle, selectionDisabl
           {active && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-950/60 text-white">
               <Loader2 className="size-5 animate-spin" aria-hidden />
-              <span className="text-xs font-medium">{generation.status === "queued" ? "Queued" : "Finding the best moments…"}</span>
+              <span className="text-xs font-medium">{generation.status === "queued" ? t("card.queued") : t("card.finding")}</span>
               <div className="progress-sheen relative mt-1 h-0.5 w-24 overflow-hidden rounded-full bg-white/20" />
             </div>
           )}
           {failed && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-950/70 text-white">
               <AlertTriangle className="size-5 text-amber-300" aria-hidden />
-              <span className="text-xs font-medium">Needs attention</span>
+              <span className="text-xs font-medium">{t("card.needsAttention")}</span>
             </div>
           )}
           {generation.top_virality_score ? (
@@ -51,8 +54,8 @@ export function GenerationCard({ generation, selected, onToggle, selectionDisabl
             </div>
           ) : null}
           <div className="absolute inset-x-3 bottom-2.5 flex items-center justify-between text-[11px] font-medium text-white/90">
-            <span className="flex items-center gap-1.5"><SourceIcon className="size-3.5" aria-hidden />{generation.source_type === "youtube" ? "YouTube" : "Upload"}</span>
-            {generation.clips_count > 0 && <span className="tabular-nums">{generation.clips_count} {generation.clips_count === 1 ? "clip" : "clips"}</span>}
+            <span className="flex items-center gap-1.5"><SourceIcon className="size-3.5" aria-hidden />{generation.source_type === "youtube" ? "YouTube" : t("card.upload")}</span>
+            {generation.clips_count > 0 && <span className="tabular-nums">{t(generation.clips_count === 1 ? "card.clipOne" : "card.clipMany", { count: generation.clips_count })}</span>}
           </div>
         </ClipCover>
         <div className="mt-2.5 space-y-1 px-0.5">
@@ -68,7 +71,7 @@ export function GenerationCard({ generation, selected, onToggle, selectionDisabl
           type="button"
           role="checkbox"
           aria-checked={Boolean(selected)}
-          aria-label={selected ? `Deselect ${generation.source_title}` : `Select ${generation.source_title}`}
+          aria-label={t(selected ? "card.deselect" : "card.select", { title: generation.source_title })}
           disabled={selectionDisabled}
           onClick={onToggle}
           className={cn(

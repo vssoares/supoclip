@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  AlertCircle, ArrowRight, ArrowUp, Captions, CaptionsOff, Check, ChevronDown, Crop, FileVideo,
-  Loader2, Paintbrush, Paperclip, Upload, Wand2, X, Youtube,
+  AlertCircle, ArrowRight, ArrowUp, Captions, CaptionsOff, Check, ChevronDown, Clapperboard, Crop, FileVideo,
+  Loader2, Paintbrush, Paperclip, Trash2, Upload, Wand2, X, Youtube,
 } from "lucide-react";
 import { CaptionSizeControl } from "@/components/caption-size-control";
 import { FONT_SEARCH_THRESHOLD, getYouTubeThumbnailUrl, uploadVideoFile } from "@/lib/video-upload";
@@ -30,6 +30,7 @@ import { formatSupportMessage, parseApiError } from "@/lib/api-error";
 import { buildFontOptionsPayload, FONT_TEMPLATE_DEFAULT_VALUE } from "@/lib/font-options";
 import { fetchGenerations, greeting, type GenerationSummary } from "@/lib/generations";
 import { cn } from "@/lib/utils";
+import { useLocale, useT } from "@/lib/i18n";
 import { FontSelectOption, type FontOption } from "@/components/font-select-option";
 
 interface CaptionTemplate {
@@ -42,14 +43,15 @@ interface CaptionTemplate {
   font_color?: string;
 }
 
+interface OutroOption {
+  filename: string;
+  display_name: string;
+  size_bytes: number;
+}
+
 type OutputFormat = "vertical" | "vertical_pan" | "vertical_split" | "original";
 
-const FRAMINGS: { id: OutputFormat; label: string; hint: string }[] = [
-  { id: "vertical", label: "Auto 9:16", hint: "Face-tracked vertical crop" },
-  { id: "vertical_pan", label: "Speaker pan", hint: "Follows whoever is talking" },
-  { id: "vertical_split", label: "Split-screen", hint: "Two speakers stacked" },
-  { id: "original", label: "Original", hint: "Keep the source aspect ratio" },
-];
+const FRAMINGS: OutputFormat[] = ["vertical", "vertical_pan", "vertical_split", "original"];
 
 const COLOR_SWATCHES = ["#FFFFFF", "#000000", "#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1"];
 
@@ -59,6 +61,8 @@ function formatBytes(bytes: number) {
 }
 
 export default function HomeApp() {
+  const t = useT();
+  const locale = useLocale();
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -84,6 +88,10 @@ export default function HomeApp() {
   const [availableTemplates, setAvailableTemplates] = useState<CaptionTemplate[]>([]);
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("vertical");
   const [addSubtitles, setAddSubtitles] = useState(true);
+  const [outros, setOutros] = useState<OutroOption[]>([]);
+  const [outro, setOutro] = useState<string | null>(null);
+  const [isUploadingOutro, setIsUploadingOutro] = useState(false);
+  const outroUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [cutLongPauses, setCutLongPauses] = useState(true);
   const [pauseThresholdMs, setPauseThresholdMs] = useState("700");
   const [removeFillerWords, setRemoveFillerWords] = useState(true);
@@ -121,11 +129,68 @@ export default function HomeApp() {
       document.head.appendChild(styleElement);
     } catch (error) {
       console.error("Failed to load fonts:", error);
-      setFontLoadError("Could not load fonts right now.");
+      setFontLoadError(t("home.err.fonts"));
+    }
+  }, [t]);
+
+  useEffect(() => { void refreshFonts(); }, [refreshFonts]);
+
+  const refreshOutros = useCallback(async () => {
+    try {
+      const response = await fetch("/api/outros", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      setOutros(data.outros || []);
+    } catch (error) {
+      console.error("Failed to load outros:", error);
     }
   }, []);
 
-  useEffect(() => { void refreshFonts(); }, [refreshFonts]);
+  useEffect(() => {
+    if (session?.user?.id) void refreshOutros();
+  }, [session?.user?.id, refreshOutros]);
+
+  const handleOutroUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const outroFile = event.target.files?.[0];
+    event.target.value = "";
+    if (!outroFile) return;
+
+    if (!/\.(mp4|mov|webm|m4v)$/i.test(outroFile.name)) {
+      setError(t("home.err.outroType"));
+      return;
+    }
+
+    try {
+      setIsUploadingOutro(true);
+      setError(null);
+      const formData = new FormData();
+      formData.append("file", outroFile);
+      const response = await fetch("/api/outros/upload", { method: "POST", body: formData });
+      if (!response.ok) {
+        setError(formatSupportMessage(await parseApiError(response, t("home.err.outroUpload"))));
+        return;
+      }
+      const data = await response.json();
+      await refreshOutros();
+      if (data?.outro?.filename) setOutro(data.outro.filename);
+    } catch (uploadError) {
+      console.error("Failed to upload outro:", uploadError);
+      setError(t("home.err.outroUpload"));
+    } finally {
+      setIsUploadingOutro(false);
+    }
+  };
+
+  const handleOutroDelete = async (filename: string) => {
+    try {
+      const response = await fetch(`/api/outros/${encodeURIComponent(filename)}`, { method: "DELETE" });
+      if (!response.ok) return;
+      if (outro === filename) setOutro(null);
+      await refreshOutros();
+    } catch (deleteError) {
+      console.error("Failed to delete outro:", deleteError);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/caption-templates")
@@ -143,7 +208,7 @@ export default function HomeApp() {
 
   const attachFile = (next: File | null) => {
     if (next && !next.type.startsWith("video/") && !/\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(next.name)) {
-      setError("That doesn't look like a video file. Try MP4, MOV, MKV or WebM.");
+      setError(t("home.err.notVideo"));
       return;
     }
     setError(null);
@@ -159,7 +224,7 @@ export default function HomeApp() {
 
     const lower = fontFile.name.toLowerCase();
     if (!lower.endsWith(".ttf") && !lower.endsWith(".otf")) {
-      setError("Only .ttf and .otf files are supported for custom fonts.");
+      setError(t("home.err.fontType"));
       return;
     }
 
@@ -170,7 +235,7 @@ export default function HomeApp() {
       formData.append("file", fontFile);
       const response = await fetch("/api/fonts/upload", { method: "POST", body: formData });
       if (!response.ok) {
-        setError(formatSupportMessage(await parseApiError(response, "Failed to upload font")));
+        setError(formatSupportMessage(await parseApiError(response, t("home.err.fontUpload"))));
         return;
       }
       const data = await response.json();
@@ -178,7 +243,7 @@ export default function HomeApp() {
       await refreshFonts();
     } catch (uploadError) {
       console.error("Failed to upload font:", uploadError);
-      setError("Failed to upload font. Please try again.");
+      setError(t("home.err.fontUploadRetry"));
     } finally {
       setIsUploadingFont(false);
     }
@@ -199,7 +264,7 @@ export default function HomeApp() {
   const previewFontSize = fontSize ?? selectedTemplate?.font_size ?? 24;
   const previewFontColor = fontColor ?? selectedTemplate?.font_color ?? "#FFFFFF";
   const generationRequiresUpgrade = Boolean(billingSummary?.monetization_enabled && !billingSummary.can_create_task);
-  const upgradeState = billingSummary?.monetization_enabled ? getUpgradeState(billingSummary) : null;
+  const upgradeState = billingSummary?.monetization_enabled ? getUpgradeState(billingSummary, t, locale) : null;
   // Users can explore every option; the plan prompt only appears when they hit Generate.
   const controlsDisabled = isLoading;
   const hasSource = sourceType === "upload" ? Boolean(file) : Boolean(url.trim());
@@ -228,11 +293,11 @@ export default function HomeApp() {
       const normalizedFilteredWords = filteredWords.split(",").map((word) => word.trim().toLowerCase()).filter(Boolean);
 
       if (sourceType === "upload" && file) {
-        setStatusMessage("Uploading video…");
+        setStatusMessage(t("home.status.uploading"));
         videoUrl = await uploadVideoFile(file);
       }
 
-      setStatusMessage(sourceType === "youtube" ? "Checking video length…" : "Starting generation…");
+      setStatusMessage(sourceType === "youtube" ? t("home.status.checking") : t("home.status.starting"));
       const startResponse = await fetch("/api/tasks/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,6 +308,7 @@ export default function HomeApp() {
           processing_mode: "fast",
           output_format: outputFormat,
           add_subtitles: addSubtitles,
+          outro,
           cut_long_pauses: cutLongPauses,
           pause_threshold_ms: normalizedPauseThreshold,
           remove_filler_words: removeFillerWords,
@@ -251,7 +317,7 @@ export default function HomeApp() {
       });
 
       if (!startResponse.ok) {
-        const info = await parseApiError(startResponse, `API error: ${startResponse.status}`);
+        const info = await parseApiError(startResponse, t("home.err.api", { status: startResponse.status }));
         const upgradeForError = upgradeReasonForError(info.code, info.detail, upgradeState?.nextPlan?.youtubeMaxMinutes);
         if (upgradeForError) {
           openUpgrade(upgradeForError);
@@ -277,7 +343,7 @@ export default function HomeApp() {
       window.location.href = `/tasks/${startResult.task_id}`;
     } catch (error) {
       console.error("Error processing video:", error);
-      setError(error instanceof Error ? error.message : "Failed to process video. Please try again.");
+      setError(error instanceof Error ? error.message : t("home.err.process"));
       setIsLoading(false);
       setStatusMessage("");
     }
@@ -295,7 +361,7 @@ export default function HomeApp() {
   }
 
   const limitNote = billingSummary?.max_youtube_duration_seconds
-    ? `${formatBillingPlanName(billingSummary.plan)}: YouTube videos up to ${billingSummary.max_youtube_duration_seconds / 60} minutes. We check the length before using a generation.`
+    ? t("home.limitNote", { plan: formatBillingPlanName(billingSummary.plan, t), minutes: billingSummary.max_youtube_duration_seconds / 60 })
     : null;
 
   return (
@@ -311,10 +377,10 @@ export default function HomeApp() {
 
         <div className="mx-auto max-w-3xl animate-rise">
           <h1 className="text-center font-display text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-tight">
-            {greeting(session.user.name)}
+            {greeting(t, session.user.name)}
           </h1>
           <p className="mt-2 text-center text-muted-foreground">
-            Drop in a long video. Get back captioned, ready-to-post clips.
+            {t("home.subtitle")}
           </p>
 
           {upgradeState && <PlanStatusNudge state={upgradeState} onUpgrade={openUpgrade} />}
@@ -347,7 +413,7 @@ export default function HomeApp() {
 
             {isDragging && (
               <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl bg-background/95 text-sm font-medium">
-                <Upload className="size-6 text-brand" />Drop to upload your video
+                <Upload className="size-6 text-brand" />{t("home.dropToUpload")}
               </div>
             )}
 
@@ -357,9 +423,9 @@ export default function HomeApp() {
                   <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-foreground text-background"><FileVideo className="size-5" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{formatBytes(file.size)} · ready to upload</p>
+                    <p className="text-xs text-muted-foreground">{t("home.readyToUpload", { size: formatBytes(file.size) })}</p>
                   </div>
-                  <button type="button" onClick={() => attachFile(null)} disabled={isLoading} aria-label="Remove file" className="rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground">
+                  <button type="button" onClick={() => attachFile(null)} disabled={isLoading} aria-label={t("home.removeFile")} className="rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground">
                     <X className="size-4" />
                   </button>
                 </div>
@@ -372,14 +438,14 @@ export default function HomeApp() {
                     <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"><Youtube className="size-5" /></span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <label htmlFor="youtube-url" className="sr-only">YouTube URL</label>
+                    <label htmlFor="youtube-url" className="sr-only">{t("home.youtubeUrl")}</label>
                     <input
                       id="youtube-url"
                       ref={urlInputRef}
                       type="url"
                       autoFocus
                       autoComplete="off"
-                      placeholder="Paste a YouTube link, or drop a video file"
+                      placeholder={t("home.urlPlaceholder")}
                       aria-describedby={limitNote ? "youtube-duration-limit" : undefined}
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
@@ -394,24 +460,24 @@ export default function HomeApp() {
 
             <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3 sm:px-4">
               {!file && (
-                <Chip onClick={() => fileInputRef.current?.click()} disabled={controlsDisabled} aria-label="Upload a video file">
-                  <Paperclip className="size-3.5" /><span className="hidden sm:inline">Upload</span>
+                <Chip onClick={() => fileInputRef.current?.click()} disabled={controlsDisabled} aria-label={t("home.uploadAria")}>
+                  <Paperclip className="size-3.5" /><span className="hidden sm:inline">{t("home.upload")}</span>
                 </Chip>
               )}
 
               <Popover>
                 <PopoverTrigger asChild>
                   <Chip disabled={controlsDisabled || !addSubtitles} active={customized}>
-                    <Paintbrush className="size-3.5" />{selectedTemplate?.name || "Default"}<ChevronDown className="size-3 opacity-60" />
+                    <Paintbrush className="size-3.5" />{selectedTemplate?.name || t("home.default")}<ChevronDown className="size-3 opacity-60" />
                   </Chip>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-[min(92vw,560px)] rounded-2xl p-0">
                   <div className="grid gap-0 sm:grid-cols-[minmax(0,1fr)_180px]">
                     <div className="max-h-[420px] min-w-0 space-y-4 overflow-y-auto p-4">
                       <div>
-                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Caption style</p>
-                        <div className="flex flex-col gap-1" role="radiogroup" aria-label="Caption style">
-                          {(availableTemplates.length ? availableTemplates : [{ id: "default", name: "Default", description: "Word-by-word captions", animation: "" } as CaptionTemplate]).map((template) => (
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("home.captionStyle")}</p>
+                        <div className="flex flex-col gap-1" role="radiogroup" aria-label={t("home.captionStyle")}>
+                          {(availableTemplates.length ? availableTemplates : [{ id: "default", name: t("home.default"), description: t("home.defaultDescription"), animation: "" } as CaptionTemplate]).map((template) => (
                             <button
                               key={template.id}
                               type="button"
@@ -433,53 +499,53 @@ export default function HomeApp() {
 
                       <div className="space-y-3 border-t pt-4">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Customize</p>
+                          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("home.customize")}</p>
                           {customized && (
                             <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => { setFontFamily(null); setFontSize(null); setFontColor(null); }}>
-                              Reset to template
+                              {t("home.resetTemplate")}
                             </button>
                           )}
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
-                            <label className="text-sm">Font</label>
+                            <label className="text-sm">{t("home.font")}</label>
                             <input ref={fontUploadInputRef} type="file" accept=".ttf,.otf" onChange={handleFontUpload} className="hidden" />
                             <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={controlsDisabled || isUploadingFont} onClick={() => canUploadCustomFonts ? fontUploadInputRef.current?.click() : openUpgrade({ kind: "custom_fonts" })}>
-                              <Upload className="size-3" />{isUploadingFont ? "Uploading…" : "Upload font"}
+                              <Upload className="size-3" />{isUploadingFont ? t("home.uploading") : t("home.uploadFont")}
                             </Button>
                           </div>
                           {!canUploadCustomFonts && (
                             <button type="button" onClick={() => openUpgrade({ kind: "custom_fonts" })} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
-                              Use your own fonts with a paid plan
+                              {t("home.ownFonts")}
                             </button>
                           )}
                           {availableFonts.length > FONT_SEARCH_THRESHOLD && (
-                            <Input value={fontSearch} onChange={(e) => setFontSearch(e.target.value)} placeholder="Search fonts" className="h-8" />
+                            <Input value={fontSearch} onChange={(e) => setFontSearch(e.target.value)} placeholder={t("home.searchFonts")} className="h-8" />
                           )}
                           <Select value={fontFamily ?? FONT_TEMPLATE_DEFAULT_VALUE} onValueChange={(value) => setFontFamily(value === FONT_TEMPLATE_DEFAULT_VALUE ? null : value)}>
-                            <SelectTrigger className="w-full"><SelectValue placeholder="Template default" /></SelectTrigger>
+                            <SelectTrigger className="w-full"><SelectValue placeholder={t("home.templateDefault")} /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value={FONT_TEMPLATE_DEFAULT_VALUE}>Template default</SelectItem>
+                              <SelectItem value={FONT_TEMPLATE_DEFAULT_VALUE}>{t("home.templateDefault")}</SelectItem>
                               {filteredFonts.map((font) => (
                                 <FontSelectOption key={font.name} font={font} />
                               ))}
-                              {availableFonts.length > 0 && filteredFonts.length === 0 && <SelectItem value="__no_match__" disabled>No fonts match your search</SelectItem>}
+                              {availableFonts.length > 0 && filteredFonts.length === 0 && <SelectItem value="__no_match__" disabled>{t("home.noFontMatch")}</SelectItem>}
                             </SelectContent>
                           </Select>
                           {fontLoadError && <p className="text-xs text-amber-700">{fontLoadError}</p>}
                         </div>
                         <CaptionSizeControl value={fontSize} onChange={setFontSize} disabled={controlsDisabled} />
                         <div className="space-y-2">
-                          <p className="text-sm">Color</p>
+                          <p className="text-sm">{t("home.color")}</p>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <button type="button" onClick={() => setFontColor(null)} className={cn("h-7 rounded-full border px-2.5 text-xs", fontColor === null ? "border-foreground bg-foreground text-background" : "hover:bg-accent")}>Template</button>
+                            <button type="button" onClick={() => setFontColor(null)} className={cn("h-7 rounded-full border px-2.5 text-xs", fontColor === null ? "border-foreground bg-foreground text-background" : "hover:bg-accent")}>{t("home.template")}</button>
                             {COLOR_SWATCHES.map((color) => (
-                              <button key={color} type="button" onClick={() => setFontColor(color)} title={color} aria-label={`Caption color ${color}`}
+                              <button key={color} type="button" onClick={() => setFontColor(color)} title={color} aria-label={t("home.captionColor", { color })}
                                 className={cn("size-7 rounded-full border-2 transition-transform hover:scale-110", fontColor === color ? "border-foreground" : "border-border")}
                                 style={{ backgroundColor: color }} />
                             ))}
-                            <label className="relative size-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-border" title="Custom color">
-                              <input type="color" value={fontColor ?? "#FFFFFF"} onChange={(e) => setFontColor(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Custom caption color" />
+                            <label className="relative size-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-border" title={t("home.customColor")}>
+                              <input type="color" value={fontColor ?? "#FFFFFF"} onChange={(e) => setFontColor(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label={t("home.customCaptionColor")} />
                               <span className="absolute inset-1 rounded-full bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)]" />
                             </label>
                           </div>
@@ -494,7 +560,7 @@ export default function HomeApp() {
                         fontSize={previewFontSize}
                         color={previewFontColor}
                       />
-                      <p className="mt-3 text-center text-[11px] text-muted-foreground">Live preview</p>
+                      <p className="mt-3 text-center text-[11px] text-muted-foreground">{t("home.livePreview")}</p>
                     </div>
                   </div>
                 </PopoverContent>
@@ -503,80 +569,133 @@ export default function HomeApp() {
               <Popover>
                 <PopoverTrigger asChild>
                   <Chip disabled={controlsDisabled}>
-                    <Crop className="size-3.5" />{FRAMINGS.find((f) => f.id === outputFormat)?.label}<ChevronDown className="size-3 opacity-60" />
+                    <Crop className="size-3.5" />{t(`home.framing.${outputFormat}`)}<ChevronDown className="size-3 opacity-60" />
                   </Chip>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-[min(92vw,420px)] rounded-2xl p-3">
-                  <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Framing</p>
-                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Framing">
+                  <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("home.framing")}</p>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("home.framing")}>
                     {FRAMINGS.map((framing) => (
                       <button
-                        key={framing.id}
+                        key={framing}
                         type="button"
                         role="radio"
-                        aria-checked={outputFormat === framing.id}
-                        onClick={() => setOutputFormat(framing.id)}
-                        className={cn("rounded-xl border p-3 text-left transition-colors hover:bg-accent", outputFormat === framing.id && "border-foreground ring-1 ring-foreground")}
+                        aria-checked={outputFormat === framing}
+                        onClick={() => setOutputFormat(framing)}
+                        className={cn("rounded-xl border p-3 text-left transition-colors hover:bg-accent", outputFormat === framing && "border-foreground ring-1 ring-foreground")}
                       >
-                        <FramingGlyph kind={framing.id} />
-                        <span className="mt-2 block text-sm font-medium">{framing.label}</span>
-                        <span className="block text-xs text-muted-foreground">{framing.hint}</span>
+                        <FramingGlyph kind={framing} />
+                        <span className="mt-2 block text-sm font-medium">{t(`home.framing.${framing}`)}</span>
+                        <span className="block text-xs text-muted-foreground">{t(`home.framing.${framing}.hint`)}</span>
                       </button>
                     ))}
                   </div>
                 </PopoverContent>
               </Popover>
 
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Chip disabled={controlsDisabled} active={outro !== null}>
+                    <Clapperboard className="size-3.5" />
+                    <span className="max-w-32 truncate">
+                      {outros.find((item) => item.filename === outro)?.display_name ?? t("home.outro")}
+                    </span>
+                    <ChevronDown className="size-3 opacity-60" />
+                  </Chip>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[min(92vw,340px)] space-y-3 rounded-2xl">
+                  <div>
+                    <p className="text-sm font-medium">{t("home.outro")}</p>
+                    <p className="text-xs text-muted-foreground">{t("home.outro.subtitle")}</p>
+                  </div>
+                  <div className="flex flex-col gap-1" role="radiogroup" aria-label={t("home.outro")}>
+                    {[{ filename: "", display_name: t("home.outro.none"), size_bytes: 0 }, ...outros].map((item) => {
+                      const selected = (outro ?? "") === item.filename;
+                      return (
+                        <div key={item.filename || "none"} className={cn("flex items-center gap-1 rounded-lg transition-colors hover:bg-accent", selected && "bg-accent")}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => setOutro(item.filename || null)}
+                            className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-sm"
+                          >
+                            <span className="min-w-0 flex-1 truncate">{item.display_name}</span>
+                            {selected && <Check className="size-4 shrink-0" />}
+                          </button>
+                          {item.filename && (
+                            <button
+                              type="button"
+                              onClick={() => void handleOutroDelete(item.filename)}
+                              aria-label={t("home.outro.delete", { name: item.display_name })}
+                              className="mr-1 rounded-md p-1.5 text-muted-foreground hover:text-foreground"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {outros.length === 0 && <p className="text-xs text-muted-foreground">{t("home.outro.empty")}</p>}
+                  <input ref={outroUploadInputRef} type="file" accept=".mp4,.mov,.webm,.m4v,video/*" onChange={handleOutroUpload} className="hidden" />
+                  <Button type="button" variant="outline" size="sm" className="w-full" disabled={isUploadingOutro} onClick={() => outroUploadInputRef.current?.click()}>
+                    {isUploadingOutro ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                    {isUploadingOutro ? t("home.outro.uploading") : t("home.outro.upload")}
+                  </Button>
+                </PopoverContent>
+              </Popover>
+
               <Chip onClick={() => setAddSubtitles((value) => !value)} disabled={controlsDisabled} aria-pressed={addSubtitles} active={!addSubtitles}>
                 {addSubtitles ? <Captions className="size-3.5" /> : <CaptionsOff className="size-3.5" />}
-                {addSubtitles ? "Captions" : "No captions"}
+                {addSubtitles ? t("home.captions") : t("home.noCaptions")}
               </Chip>
 
               <Popover>
                 <PopoverTrigger asChild>
                   <Chip disabled={controlsDisabled} active={cleanupCount > 0}>
-                    <Wand2 className="size-3.5" />Cleanup{cleanupCount > 0 && <span className="rounded-full bg-foreground px-1.5 text-[10px] text-background">{cleanupCount}</span>}
+                    <Wand2 className="size-3.5" />{t("home.cleanup")}{cleanupCount > 0 && <span className="rounded-full bg-foreground px-1.5 text-[10px] text-background">{cleanupCount}</span>}
                     <ChevronDown className="size-3 opacity-60" />
                   </Chip>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-[min(92vw,340px)] space-y-4 rounded-2xl">
                   <div>
-                    <p className="text-sm font-medium">Clip cleanup</p>
-                    <p className="text-xs text-muted-foreground">Tighten dead air and cut filler sounds while rendering.</p>
+                    <p className="text-sm font-medium">{t("home.cleanup.title")}</p>
+                    <p className="text-xs text-muted-foreground">{t("home.cleanup.subtitle")}</p>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <label htmlFor="cut-pauses" className="text-sm font-medium">Shorten long pauses</label>
-                      <p className="text-xs text-muted-foreground">Trim silences longer than this down to a short breath</p>
+                      <label htmlFor="cut-pauses" className="text-sm font-medium">{t("home.cleanup.pauses")}</label>
+                      <p className="text-xs text-muted-foreground">{t("home.cleanup.pausesHint")}</p>
                     </div>
                     <Switch id="cut-pauses" checked={cutLongPauses} onCheckedChange={setCutLongPauses} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Input type="number" min={250} max={3000} step={50} value={pauseThresholdMs} onChange={(e) => setPauseThresholdMs(e.target.value)} disabled={!cutLongPauses} aria-label="Pause threshold (ms)" className="h-8 w-24" />
-                    <span className="text-xs text-muted-foreground">milliseconds</span>
+                    <Input type="number" min={250} max={3000} step={50} value={pauseThresholdMs} onChange={(e) => setPauseThresholdMs(e.target.value)} disabled={!cutLongPauses} aria-label={t("home.cleanup.threshold")} className="h-8 w-24" />
+                    <span className="text-xs text-muted-foreground">{t("home.cleanup.ms")}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <label htmlFor="filler-words" className="text-sm font-medium">Remove filler words</label>
-                      <p className="text-xs text-muted-foreground">“um”, “uh”, “erm” and similar sounds</p>
+                      <label htmlFor="filler-words" className="text-sm font-medium">{t("home.cleanup.fillers")}</label>
+                      <p className="text-xs text-muted-foreground">{t("home.cleanup.fillersHint")}</p>
                     </div>
                     <Switch id="filler-words" checked={removeFillerWords} onCheckedChange={setRemoveFillerWords} />
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="filtered-words" className="text-xs font-medium text-muted-foreground">Extra words or phrases to cut</label>
-                    <Input id="filtered-words" value={filteredWords} onChange={(e) => setFilteredWords(e.target.value)} placeholder="basically, literally, to be honest" className="h-8" />
+                    <label htmlFor="filtered-words" className="text-xs font-medium text-muted-foreground">{t("home.cleanup.extra")}</label>
+                    <Input id="filtered-words" value={filteredWords} onChange={(e) => setFilteredWords(e.target.value)} placeholder={t("home.cleanup.extraPlaceholder")} className="h-8" />
                   </div>
                 </PopoverContent>
               </Popover>
 
               <div className="ml-auto flex items-center gap-2">
                 <span className="hidden text-xs text-muted-foreground sm:inline-flex sm:items-center sm:gap-1">
-                  {isLoading ? <span role="status">{statusMessage || "Working…"}</span> : hasSource ? <><Kbd>⌘</Kbd><Kbd>↵</Kbd></> : null}
+                  {isLoading ? <span role="status">{statusMessage || t("home.status.working")}</span> : hasSource ? <><Kbd>⌘</Kbd><Kbd>↵</Kbd></> : null}
                 </span>
                 <Button
                   type="submit"
                   size="icon"
-                  aria-label="Generate clips"
+                  aria-label={t("home.generate")}
                   disabled={!hasSource || isLoading}
                   className="size-9 rounded-full bg-brand text-brand-foreground shadow-sm hover:bg-brand/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
                 >
@@ -597,17 +716,17 @@ export default function HomeApp() {
 
           <p id="youtube-duration-limit" className="mt-4 text-center text-xs text-muted-foreground">
             {limitNote ? `${limitNote} ` : ""}
-            Completion emails follow your preference in{" "}
-            <Link href="/settings" className="font-medium text-foreground underline-offset-2 hover:underline">Settings</Link>.
+            {t("home.emailPref")}{" "}
+            <Link href="/settings" className="font-medium text-foreground underline-offset-2 hover:underline">{t("home.settings")}</Link>.
           </p>
         </div>
 
         <section className="mt-16 md:mt-24" aria-labelledby="recent-heading">
           <div className="mb-4 flex items-end justify-between">
-            <h2 id="recent-heading" className="font-display text-lg font-bold tracking-tight">Recent</h2>
+            <h2 id="recent-heading" className="font-display text-lg font-bold tracking-tight">{t("home.recent")}</h2>
             {recent && recent.length > 0 && (
               <Link href="/list" className="group flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                View library<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                {t("home.viewLibrary")}<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
               </Link>
             )}
           </div>
@@ -617,7 +736,7 @@ export default function HomeApp() {
             </div>
           ) : recent.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-              Your clips will show up here. Paste a link above to make your first batch.
+              {t("home.recentEmpty")}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
@@ -654,6 +773,7 @@ function Chip({ active, className, children, ...props }: React.ComponentProps<"b
 }
 
 function CaptionPreview({ thumbnail, fontFamily, fontSize, color }: { thumbnail: string | null; fontFamily: string; fontSize: number; color: string }) {
+  const t = useT();
   return (
     <div className="relative mx-auto aspect-[9/16] w-full overflow-hidden rounded-xl bg-stone-800 shadow-inner">
       {thumbnail ? (
@@ -662,7 +782,7 @@ function CaptionPreview({ thumbnail, fontFamily, fontSize, color }: { thumbnail:
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,oklch(0.55_0.05_50),oklch(0.22_0.01_50))]" />
       )}
       <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-black/40 to-transparent" />
-      <p className="absolute inset-x-2 top-[10%] text-center text-[10px] font-bold leading-tight text-white drop-shadow">Your hook title lands here</p>
+      <p className="absolute inset-x-2 top-[10%] text-center text-[10px] font-bold leading-tight text-white drop-shadow">{t("home.preview.hook")}</p>
       <p
         className="absolute inset-x-2 top-[72%] text-center font-bold leading-snug"
         style={{
@@ -672,7 +792,7 @@ function CaptionPreview({ thumbnail, fontFamily, fontSize, color }: { thumbnail:
           textShadow: "0 2px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)",
         }}
       >
-        This is how your captions look
+        {t("home.preview.captions")}
       </p>
     </div>
   );
@@ -701,17 +821,18 @@ function PlanStatusNudge({
   state: NonNullable<ReturnType<typeof getUpgradeState>>;
   onUpgrade: (reason: UpgradeReason) => void;
 }) {
+  const t = useT();
   const { nextPlan, resetsOn } = state;
-  const refreshes = resetsOn ? `Refreshes on ${resetsOn}.` : "Refreshes next billing period.";
+  const refreshes = resetsOn ? t("home.nudge.refreshesOn", { date: resetsOn }) : t("home.nudge.refreshesNext");
 
   if (!state.isPaid) {
-    const entry = getPublicBillingPlans()[0];
+    const entry = getPublicBillingPlans(t)[0];
     return (
       <UpgradeNudge
         className="mt-6"
-        title="Pick a plan to start clipping"
-        description={entry ? `From $${entry.priceMonthly}/mo for ${entry.generationLimit} videos. Feel free to set everything up first.` : undefined}
-        action="See plans"
+        title={t("home.nudge.pickPlan")}
+        description={entry ? t("home.nudge.from", { price: entry.priceMonthly, limit: entry.generationLimit }) : undefined}
+        action={t("home.nudge.seePlans")}
         onAction={() => onUpgrade({ kind: "start" })}
       />
     );
@@ -721,9 +842,9 @@ function PlanStatusNudge({
     return (
       <UpgradeNudge
         className="mt-6"
-        title={`You've clipped all ${state.limit} videos this period`}
-        description={nextPlan ? `${refreshes} Or keep going with ${nextPlan.name}: ${nextPlan.generationLimit} a month.` : state.managedByAppStore ? `${refreshes} You can change plans in the SupoClip iOS app.` : refreshes}
-        action={nextPlan ? `Get ${nextPlan.name}` : undefined}
+        title={t("home.nudge.allClipped", { limit: state.limit ?? "" })}
+        description={nextPlan ? t("home.nudge.keepGoing", { refreshes, plan: nextPlan.name, limit: nextPlan.generationLimit }) : state.managedByAppStore ? t("home.nudge.iosPlans", { refreshes }) : refreshes}
+        action={nextPlan ? t("home.nudge.get", { plan: nextPlan.name }) : undefined}
         onAction={nextPlan ? () => onUpgrade({ kind: "limit" }) : undefined}
       />
     );
@@ -733,9 +854,9 @@ function PlanStatusNudge({
     return (
       <UpgradeNudge
         className="mt-6"
-        title={`${state.remaining} ${state.remaining === 1 ? "video" : "videos"} left this period`}
-        description={nextPlan ? `${refreshes} Need more room? ${nextPlan.name} gives you ${nextPlan.generationLimit} a month.` : refreshes}
-        action={nextPlan ? "Upgrade" : undefined}
+        title={t(state.remaining === 1 ? "home.nudge.leftOne" : "home.nudge.leftMany", { count: state.remaining })}
+        description={nextPlan ? t("home.nudge.needMore", { refreshes, plan: nextPlan.name, limit: nextPlan.generationLimit }) : refreshes}
+        action={nextPlan ? t("home.nudge.upgrade") : undefined}
         onAction={nextPlan ? () => onUpgrade({ kind: "explore" }) : undefined}
       />
     );

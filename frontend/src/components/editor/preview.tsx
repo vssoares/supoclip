@@ -35,6 +35,7 @@ import {
 } from "@/lib/editor/document";
 import { drawEditorFrame, loadEditorFont } from "@/lib/editor/render";
 import type { InspectorTab } from "./inspector";
+import { useT } from "@/lib/i18n";
 import { Panel, ToolButton } from "./studio-ui";
 
 interface Props {
@@ -63,6 +64,7 @@ export function Preview({
   update,
   videoRef,
 }: Props) {
+  const t = useT();
   const stageRef = useRef<HTMLDivElement>(null);
   const [previewWidth, setPreviewWidth] = useState(270);
   const canvasRef = useRef<HTMLCanvasElement>(null),
@@ -198,17 +200,17 @@ export function Preview({
     onTime(video.currentTime);
   };
   const hint = fontError
-    ? "Caption font could not load. Check your connection before exporting."
+    ? t("ed.pv.fontError")
     : tab === "framing"
-      ? "Drag the video to reframe · captions stay in place"
+      ? t("ed.pv.dragFrame")
       : tab === "captions"
-        ? "Drag vertically to position captions"
+        ? t("ed.pv.dragCaption")
         : null;
   return (
-    <Panel aria-label="Video preview">
+    <Panel aria-label={t("ed.pv.aria")}>
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          Preview
+          {t("ed.pv.title")}
           <span className="text-xs font-normal text-muted-foreground tabular-nums">
             {size.width} × {size.height} · {Math.round(asset.fps)} fps
           </span>
@@ -219,13 +221,13 @@ export function Preview({
               size="sm"
               pressed={guides}
               onPressedChange={setGuides}
-              aria-label="Safe area"
+              aria-label={t("ed.pv.safe")}
             >
               <Scan />
-              <span className="hidden sm:inline">Safe area</span>
+              <span className="hidden sm:inline">{t("ed.pv.safe")}</span>
             </Toggle>
           </TooltipTrigger>
-          <TooltipContent>Show where platform UI covers the video</TooltipContent>
+          <TooltipContent>{t("ed.pv.safeTip")}</TooltipContent>
         </Tooltip>
       </div>
       <div
@@ -268,7 +270,7 @@ export function Preview({
             ref={canvasRef}
             width={Math.round((size.width / size.height) * 640)}
             height={640}
-            aria-label="Edited video preview"
+            aria-label={t("ed.pv.canvas")}
             className={`block h-full w-full touch-none ${tab === "framing" || tab === "captions" ? "cursor-move" : "cursor-default"}`}
             onPointerDown={(e) => {
               if (tab !== "framing" && tab !== "captions") return;
@@ -336,13 +338,13 @@ export function Preview({
           {guides && (
             <div className="pointer-events-none absolute inset-x-[8%] top-[10%] bottom-[20%] rounded-lg border border-dashed border-white/60">
               <span className="absolute -top-5 text-[10px] text-white/70">
-                Keep important content here
+                {t("ed.pv.keepHere")}
               </span>
             </div>
           )}
           {mediaError && (
             <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-stone-950/90 p-5 text-center text-sm text-white">
-              <p>Preview could not load.</p>
+              <p>{t("ed.pv.couldNotLoad")}</p>
               <Button
                 variant="secondary"
                 size="sm"
@@ -351,7 +353,7 @@ export function Preview({
                   videoRef.current?.load();
                 }}
               >
-                Retry preview
+                {t("ed.pv.retry")}
               </Button>
             </div>
           )}
@@ -370,14 +372,14 @@ export function Preview({
             <TooltipTrigger asChild>
               <Toggle
                 size="sm"
-                aria-label="Loop selected edit"
+                aria-label={t("ed.pv.loop")}
                 pressed={loop}
                 onPressedChange={setLoop}
               >
                 <Repeat />
               </Toggle>
             </TooltipTrigger>
-            <TooltipContent>Loop playback</TooltipContent>
+            <TooltipContent>{t("ed.pv.loopTip")}</TooltipContent>
           </Tooltip>
           <Select
             value={String(rate)}
@@ -385,7 +387,7 @@ export function Preview({
           >
             <SelectTrigger
               size="sm"
-              aria-label="Preview playback speed"
+              aria-label={t("ed.pv.speed")}
               className="h-8 w-[4.5rem] border-transparent shadow-none hover:bg-accent tabular-nums"
             >
               <SelectValue />
@@ -401,7 +403,7 @@ export function Preview({
         </div>
         <div className="flex items-center gap-1">
           <ToolButton
-            label="Previous frame"
+            label={t("ed.pv.prevFrame")}
             shortcut="←"
             onClick={() => step(-1)}
           >
@@ -410,7 +412,8 @@ export function Preview({
           <Button
             size="icon-lg"
             className="rounded-full"
-            aria-label={playing ? "Pause" : "Play"}
+            data-editor-play=""
+            aria-label={playing ? t("ed.pv.pause") : t("ed.pv.play")}
             onClick={() => void play()}
           >
             {playing ? (
@@ -419,14 +422,14 @@ export function Preview({
               <Play className="ml-0.5 fill-current" />
             )}
           </Button>
-          <ToolButton label="Next frame" shortcut="→" onClick={() => step(1)}>
+          <ToolButton label={t("ed.pv.nextFrame")} shortcut="→" onClick={() => step(1)}>
             <SkipForward />
           </ToolButton>
         </div>
         <div className="flex items-center justify-end gap-2 text-xs tabular-nums">
           {doc.muted && (
             <VolumeX
-              aria-label="Muted"
+              aria-label={t("ed.pv.muted")}
               className="size-3.5 text-muted-foreground"
             />
           )}
