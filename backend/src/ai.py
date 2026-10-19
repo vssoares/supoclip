@@ -398,7 +398,7 @@ HOOK TITLES ("hook_title" per segment):
 - Stay grounded: only promise what the clip actually delivers; never invent facts or numbers
 - Do not simply repeat the first spoken words verbatim; reframe them as a headline
 - Plain text only: no hashtags, no emojis, no quotes around the title
-- Write it in the same language as the transcript
+- Write it in Portuguese (pt-BR), regardless of the transcript language
 - Good examples: "The $40k mistake I keep seeing", "Why nobody tells you this about VC", "Do this before your next interview"
 
 COLD-OPEN HOOK ("hook_start_time"/"hook_end_time" per segment, optional):
