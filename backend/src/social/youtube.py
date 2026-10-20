@@ -35,6 +35,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 API_BASE = "https://www.googleapis.com/youtube/v3"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
+THUMBNAIL_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
 
 SCOPES = (
     "https://www.googleapis.com/auth/youtube.upload",
@@ -243,11 +244,41 @@ class YouTubeProvider(SocialProvider):
         video_id = payload.get("id")
         if not video_id:
             raise SocialProviderError("YouTube upload finished without a video id")
+        thumbnail_set = self._set_thumbnail(access_token, video_id, request.thumbnail_jpeg)
+        if thumbnail_set is not None:
+            payload = {**payload, "thumbnail_set": thumbnail_set}
         return PublishResult(
             external_post_id=video_id,
             external_url=f"https://www.youtube.com/shorts/{video_id}",
             raw=payload,
         )
+
+    def _set_thumbnail(
+        self, access_token: str, video_id: str, jpeg: Optional[bytes]
+    ) -> Optional[bool]:
+        """
+        Best effort: the video is already live, so a refused thumbnail (e.g. the
+        channel isn't verified for custom thumbnails) must never fail the post.
+        """
+        if not jpeg:
+            return None
+        try:
+            response = self.http.post(
+                THUMBNAIL_URL,
+                params={"videoId": video_id, "uploadType": "media"},
+                headers={**self._auth_headers(access_token), "Content-Type": "image/jpeg"},
+                data=jpeg,
+                timeout=DEFAULT_HTTP_TIMEOUT,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube thumbnail upload failed for %s: %s", video_id, type(exc).__name__)
+            return False
+        if response.status_code >= 400:
+            logger.warning(
+                "YouTube rejected the thumbnail for %s: %s", video_id, self._extract_error(response)
+            )
+            return False
+        return True
 
     # -- analytics ------------------------------------------------------
     def fetch_metrics(

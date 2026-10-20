@@ -103,6 +103,8 @@ class PublishRequest:
     # pulls the video instead of accepting an upload.
     public_media_url: Optional[str] = None
     account_metadata: Dict[str, Any] = field(default_factory=dict)
+    # AI-generated cover for platforms whose API accepts one (YouTube).
+    thumbnail_jpeg: Optional[bytes] = None
 
 
 @dataclass

@@ -142,3 +142,41 @@ it("shows a spinner while a post is uploading and offers no actions", () => {
   expect(screen.getByText("Uploading…")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Post actions" })).toBeNull();
 });
+
+it("fills the form and shows the thumbnail after generating with AI", async () => {
+  const assets = {
+    title: "AI title",
+    description: "AI description",
+    hashtags: ["growth", "shorts"],
+    thumbnail_headline: "Never do this",
+    thumbnail: "data:image/jpeg;base64,AAAA",
+  };
+  const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+    Promise.resolve(
+      init?.method === "POST"
+        ? new Response(JSON.stringify({ assets }), { status: 200 })
+        : new Response(JSON.stringify({ assets: null }), { status: 200 }),
+    ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <ClipPublishButton
+      taskId="task-1"
+      clip={clip}
+      connections={[connection()]}
+      providers={[provider()]}
+      onChanged={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /publish/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Generate with AI" }));
+
+  expect(await screen.findByAltText("AI-generated thumbnail")).toBeInTheDocument();
+  expect(screen.getByLabelText("Title")).toHaveValue("AI title");
+  expect(screen.getByLabelText("Caption")).toHaveValue("AI description");
+  expect(screen.getByLabelText("Hashtags")).toHaveValue("growth, shorts");
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/social/clips/clip-1/assets/generate",
+    expect.objectContaining({ method: "POST" }),
+  );
+});

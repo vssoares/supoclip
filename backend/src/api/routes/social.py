@@ -197,6 +197,54 @@ async def create_post(request: Request, db: AsyncSession = Depends(get_db)):
     return {"post": post}
 
 
+@router.get("/clips/{clip_id}/assets")
+async def get_clip_assets(clip_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """The AI-written copy and thumbnail saved for a clip (thumbnail as a data URL)."""
+    user_id = await _allowed_user_id(request, db)
+    try:
+        return {"assets": await _service(request, db).get_clip_assets(user_id, clip_id)}
+    except SocialError as exc:
+        raise _http_error(exc)
+
+
+@router.post("/clips/{clip_id}/assets/generate")
+async def generate_clip_assets(clip_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Generate the title/description/hashtags and/or the thumbnail with AI.
+
+    Body (all optional): ``copy`` and ``thumbnail`` booleans (default true),
+    ``guidance`` to steer the copy, ``headline`` to set the thumbnail text.
+    """
+    user_id = await _allowed_user_id(request, db)
+    body = await _json_body(request)
+    copy = body.get("copy", True) is not False
+    thumbnail = body.get("thumbnail", True) is not False
+    if not copy and not thumbnail:
+        raise HTTPException(status_code=422, detail="Nothing to generate")
+    try:
+        assets = await _service(request, db).generate_clip_assets(
+            user_id,
+            clip_id,
+            copy=copy,
+            thumbnail=thumbnail,
+            guidance=body.get("guidance") if isinstance(body.get("guidance"), str) else None,
+            headline=body.get("headline") if isinstance(body.get("headline"), str) else None,
+        )
+    except SocialError as exc:
+        raise _http_error(exc)
+    return {"assets": assets}
+
+
+@router.delete("/clips/{clip_id}/assets/thumbnail")
+async def delete_clip_thumbnail(clip_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _allowed_user_id(request, db)
+    try:
+        await _service(request, db).delete_clip_thumbnail(user_id, clip_id)
+    except SocialError as exc:
+        raise _http_error(exc)
+    return {"message": "Thumbnail removed"}
+
+
 @router.get("/performance")
 async def get_performance(request: Request, db: AsyncSession = Depends(get_db)):
     """Aggregate audience performance, grouped the same way the AI uses it."""

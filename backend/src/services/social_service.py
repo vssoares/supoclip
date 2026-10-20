@@ -24,8 +24,10 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import clip_publish_ai
 from ..config import Config, get_config
 from ..media_storage import STORAGE_ERRORS, MediaStorage, is_s3, media_work
+from ..repositories.clip_assets_repository import ClipAssetsRepository
 from ..repositories.clip_repository import ClipRepository
 from ..repositories.social_repository import SocialRepository, TERMINAL_POST_STATUSES
 from ..repositories.task_repository import TaskRepository
@@ -84,6 +86,10 @@ class SocialProviderUnavailable(SocialError):
     status_code = 503
 
 
+class SocialGenerationError(SocialError):
+    status_code = 502
+
+
 class SocialValidationError(SocialError):
     status_code = 400
 
@@ -103,6 +109,7 @@ class SocialService:
         self.repo = SocialRepository
         self.clip_repo = ClipRepository
         self.task_repo = TaskRepository
+        self.assets_repo = ClipAssetsRepository
         self.storage = MediaStorage(self.config)
 
     # ------------------------------------------------------------------
@@ -411,6 +418,117 @@ class SocialService:
         )
         return post
 
+    # ------------------------------------------------------------------
+    # AI publish assets (title, description, hashtags, thumbnail)
+    # ------------------------------------------------------------------
+    async def _owned_clip(self, user_id: str, clip_id: str) -> Dict[str, Any]:
+        clip = await self.clip_repo.get_clip_by_id(self.db, clip_id)
+        task = await self.task_repo.get_task_by_id(self.db, clip["task_id"]) if clip else None
+        if not clip or not task or task.get("user_id") != user_id:
+            raise SocialNotFound("Clip not found")
+        return clip
+
+    @staticmethod
+    def _serialize_assets(row: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        row = row or {}
+        jpeg = row.get("thumbnail_jpeg")
+        return {
+            "title": row.get("title"),
+            "description": row.get("description"),
+            "hashtags": list(row.get("hashtags") or []),
+            "thumbnail_headline": row.get("thumbnail_headline"),
+            "thumbnail": (
+                "data:image/jpeg;base64," + base64.b64encode(bytes(jpeg)).decode("ascii")
+                if jpeg
+                else None
+            ),
+            "updated_at": row.get("updated_at"),
+        }
+
+    async def get_clip_assets(self, user_id: str, clip_id: str) -> Dict[str, Any]:
+        await self._owned_clip(user_id, clip_id)
+        return self._serialize_assets(await self.assets_repo.get(self.db, clip_id))
+
+    @media_work
+    async def generate_clip_assets(
+        self,
+        user_id: str,
+        clip_id: str,
+        *,
+        copy: bool = True,
+        thumbnail: bool = True,
+        guidance: Optional[str] = None,
+        headline: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Write the post copy and/or render the thumbnail for a clip with AI."""
+        clip = await self._owned_clip(user_id, clip_id)
+        saved = await self.assets_repo.get(self.db, clip_id, with_thumbnail=False) or {}
+        moment = clip_publish_ai.DEFAULT_COVER_MOMENT
+        headline = (headline or "").strip() or None
+
+        if copy:
+            try:
+                result = await clip_publish_ai.generate_publish_copy(
+                    transcript=clip.get("text") or "",
+                    hook_title=clip.get("hook_title"),
+                    reasoning=clip.get("reasoning"),
+                    guidance=guidance,
+                )
+            except RuntimeError as exc:
+                raise SocialProviderUnavailable(str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 - provider/network failures
+                logger.error(
+                    "AI copy generation failed for clip %s (%s): %s",
+                    clip_id, type(exc).__name__, redact(exc),
+                )
+                raise SocialGenerationError(
+                    "The AI couldn't write the description. Try again in a moment."
+                ) from exc
+            moment = result.cover_moment
+            headline = headline or result.thumbnail_headline
+            await self.assets_repo.save_copy(
+                self.db,
+                clip_id,
+                title=result.title,
+                description=result.description,
+                hashtags=normalize_hashtags(result.hashtags),
+                thumbnail_headline=headline or "",
+            )
+
+        if thumbnail:
+            headline = (
+                headline or saved.get("thumbnail_headline") or clip.get("hook_title") or ""
+            )
+            clip_file = clip.get("file_path") or ""
+            try:
+                if not await self._media_exists(clip_file):
+                    raise SocialValidationError("The clip file is missing; regenerate it first.")
+                local = await run_in_thread(self.storage.local_path, clip_file)
+            except STORAGE_ERRORS as exc:
+                raise SocialProviderUnavailable(
+                    "Clip storage is temporarily unavailable. Try again shortly."
+                ) from exc
+            try:
+                jpeg = await run_in_thread(
+                    clip_publish_ai.build_thumbnail,
+                    local,
+                    float(clip.get("duration") or 0),
+                    headline,
+                    moment,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "Thumbnail render failed for clip %s (%s): %s", clip_id, type(exc).__name__, exc
+                )
+                raise SocialGenerationError("Couldn't build the thumbnail from this clip.") from exc
+            await self.assets_repo.save_thumbnail(self.db, clip_id, headline=headline, jpeg=jpeg)
+
+        return self._serialize_assets(await self.assets_repo.get(self.db, clip_id))
+
+    async def delete_clip_thumbnail(self, user_id: str, clip_id: str) -> None:
+        await self._owned_clip(user_id, clip_id)
+        await self.assets_repo.clear_thumbnail(self.db, clip_id)
+
     async def _enqueue_publish(
         self, post_id: str, attempts: int, defer_seconds: int = 0
     ) -> None:
@@ -629,8 +747,15 @@ class SocialService:
             provider = get_provider(post["provider"], self.config)
             file_path, public_url = await self._resolve_publish_media(post, provider)
             access_token = await self._get_valid_access_token(account)
+            assets = (
+                await self.assets_repo.get(self.db, post["clip_id"])
+                if post.get("clip_id")
+                else None
+            )
+            thumbnail = (assets or {}).get("thumbnail_jpeg")
             request = PublishRequest(
                 file_path=file_path,
+                thumbnail_jpeg=bytes(thumbnail) if thumbnail else None,
                 title=post.get("title") or "",
                 caption=post.get("caption") or "",
                 hashtags=list(post.get("hashtags") or []),
@@ -1078,6 +1203,7 @@ __all__ = [
     "SocialNotFound",
     "SocialValidationError",
     "SocialProviderUnavailable",
+    "SocialGenerationError",
     "normalize_hashtags",
     "format_performance_context",
     "TERMINAL_POST_STATUSES",

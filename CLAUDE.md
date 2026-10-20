@@ -172,6 +172,7 @@ PostgreSQL 15. Schema in `init.sql`. Mixed naming conventions:
 - `POST /social/connections/{provider}/authorize` + `/callback` — OAuth handshake (session auth only)
 - `POST /social/posts` — publish or schedule a clip; `GET /social/posts?task_id=` — list with metrics
 - `POST /social/posts/{id}/cancel|retry|refresh-metrics`, `DELETE /social/posts/{id}`
+- `GET /social/clips/{id}/assets`, `POST /social/clips/{id}/assets/generate`, `DELETE /social/clips/{id}/assets/thumbnail` — AI title/description/hashtags + thumbnail (frame + AI headline, `clip_publish_ai.py`), saved in `clip_publish_assets`; the thumbnail is sent to YouTube on publish (best effort)
 - `GET /social/performance` — metrics by hook type / platform / clip length (also fed into the AI prompt)
 - `GET /social/performance/timeseries?days=30` — daily new views from metrics snapshots (Analytics chart)
 - `GET /social/media/{token}` — public token-gated clip stream for Instagram

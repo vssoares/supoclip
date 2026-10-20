@@ -6,12 +6,14 @@ import { toast } from "sonner";
 import {
   AlertCircle,
   Clock,
+  Download,
   ExternalLink,
   Loader2,
   MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Send,
+  Sparkles,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -68,6 +70,14 @@ interface PublishableClip {
   clip_order: number;
   hook_title: string | null;
   text: string | null;
+}
+
+interface ClipAssets {
+  title: string | null;
+  description: string | null;
+  hashtags: string[];
+  thumbnail_headline: string | null;
+  thumbnail: string | null;
 }
 
 interface ClipPublishButtonProps {
@@ -318,6 +328,9 @@ export function ClipPublishButton({
   const [scheduledFor, setScheduledFor] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+  const [headline, setHeadline] = useState("");
+  const [aiBusy, setAiBusy] = useState<"all" | "thumbnail" | null>(null);
 
   const activeConnections = useMemo(
     () => connections.filter((connection) => connection.status !== "revoked"),
@@ -346,7 +359,61 @@ export function ClipPublishButton({
     setScheduledFor(toLocalDateTimeInput(new Date(Date.now() + 60 * 60 * 1000)));
     setAccountId(nextAccountId);
     setPrivacy(defaultPrivacyFor(providerForAccount(nextAccountId)));
+    setThumbnail(null);
+    setHeadline("");
     setOpen(true);
+    void loadSavedAssets();
+  };
+
+  const applyAssets = (assets: ClipAssets, fillFields: boolean) => {
+    if (fillFields) {
+      if (assets.title) setTitle(assets.title);
+      if (assets.description) setCaption(assets.description);
+      if (assets.hashtags.length > 0) setHashtags(assets.hashtags.join(", "));
+    }
+    setThumbnail(assets.thumbnail);
+    setHeadline(assets.thumbnail_headline ?? "");
+  };
+
+  // Assets generated earlier (e.g. before closing the sheet) come back as-is.
+  const loadSavedAssets = async () => {
+    try {
+      const response = await fetch(`/api/social/clips/${clip.id}/assets`);
+      if (!response.ok) return;
+      const { assets } = (await response.json()) as { assets?: ClipAssets };
+      if (assets) applyAssets(assets, true);
+    } catch {
+      // Optional prefill; the form works without it.
+    }
+  };
+
+  const generateWithAi = async (scope: "all" | "thumbnail") => {
+    setAiBusy(scope);
+    setError(null);
+    try {
+      const response = await fetch(`/api/social/clips/${clip.id}/assets/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          scope === "all"
+            ? { copy: true, thumbnail: true }
+            : { copy: false, thumbnail: true, headline },
+        ),
+      });
+      if (!response.ok) throw new Error(await readError(response, t("pub.ai.failed")));
+      const { assets } = (await response.json()) as { assets: ClipAssets };
+      applyAssets(assets, scope === "all");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("pub.ai.failed"));
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const removeThumbnail = async () => {
+    const response = await fetch(`/api/social/clips/${clip.id}/assets/thumbnail`, { method: "DELETE" });
+    if (response.ok) setThumbnail(null);
+    else setError(await readError(response, t("pub.actionFailed")));
   };
 
   const selectAccount = (id: string) => {
@@ -464,6 +531,70 @@ export function ClipPublishButton({
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">{t("pub.ai.title")}</p>
+                      <p className="text-xs text-muted-foreground">{t("pub.ai.desc")}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      disabled={aiBusy !== null}
+                      onClick={() => generateWithAi("all")}
+                    >
+                      {aiBusy === "all" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                      {aiBusy === "all" ? t("pub.ai.generating") : thumbnail ? t("pub.ai.regenerate") : t("pub.ai.generate")}
+                    </Button>
+                  </div>
+                  {thumbnail && (
+                    <div className="flex gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={thumbnail}
+                        alt={t("pub.ai.thumbAlt")}
+                        className="h-40 w-[90px] shrink-0 rounded-md border object-cover"
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Label htmlFor={`publish-headline-${clip.id}`}>{t("pub.ai.headline")}</Label>
+                        <Input
+                          id={`publish-headline-${clip.id}`}
+                          value={headline}
+                          maxLength={60}
+                          onChange={(event) => setHeadline(event.target.value)}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={aiBusy !== null || !headline.trim()}
+                            onClick={() => generateWithAi("thumbnail")}
+                          >
+                            {aiBusy === "thumbnail" && <Loader2 className="size-4 animate-spin" />}
+                            {t("pub.ai.updateThumb")}
+                          </Button>
+                          <Button size="icon" variant="ghost" className="size-8" asChild>
+                            <a href={thumbnail} download={`thumbnail-${clip.clip_order}.jpg`} aria-label={t("pub.ai.download")}>
+                              <Download className="size-4" />
+                            </a>
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-8"
+                            aria-label={t("pub.ai.remove")}
+                            onClick={removeThumbnail}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{t("pub.ai.thumbHint")}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
